@@ -12,7 +12,7 @@
   * data.
   *
   ****************************************************************************/
-
+ #ifdef CONFIG_BT_ENABLED
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,12 +77,6 @@ static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 
 #define WRITE_EVENT_ID 1234566
 #define POST_WAIT_MS 5
-typedef enum
-{
-    PARAM_TYPE_INT,
-    PARAM_TYPE_FLOAT,
-    PARAM_TYPE_STRING
-} gatt_param_type_t;
 
 typedef struct gatt_param_t
 {
@@ -1083,3 +1077,5 @@ void gattserver_init(const char* name, const char* service_uuid)
 
     return;
 }
+
+#endif //  CONFIG_BT_ENABLED

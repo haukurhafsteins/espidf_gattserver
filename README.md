@@ -30,18 +30,7 @@ Before using the GATT server, users **must create a UUID header file** (e.g., `m
 
 ---
 
-## 2️⃣ Initialize the GATT Server
-Call `gattserver_init()` with **your service name and UUID**:
-```c
-#include "gattserver.h"
-#include "my_uuid_config.h"
-
-gattserver_init("My BLE Device", MY_SERVICE_UUID);
-```
-
----
-
-## 3️⃣ Register Characteristics
+## 2️⃣ Register Characteristics
 ### 📌 Register a Float Characteristic
 ```c
 gatt_param_handle_t temp_char = gattserver_register_float("Temperature", MY_CHAR_UUID_TEMPERATURE,
@@ -60,6 +49,17 @@ gatt_param_handle_t humidity_char = gattserver_register_string("Humidity", MY_CH
                                      ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_WRITE, "50%");
 ```
 
+---
+
+## 3️⃣ Initialize the GATT Server
+Call `gattserver_init()` with **your service name and UUID**:
+```c
+#include "gattserver.h"
+#include "my_uuid_config.h"
+
+gattserver_init("My BLE Device", MY_SERVICE_UUID);
+```
+The server will register all characteristics previously registered in 2️⃣.
 ---
 
 ## 4️⃣ Send Notifications
@@ -109,11 +109,4 @@ esp_err_t status = gattserver_register_write_cb(humidity_char, evloop->loop_hand
 | **Write Callback**  | `gattserver_register_write_cb()` | Handle client writes |
 
 ---
-
-## 🚀 Next Steps
-- Modify `my_uuid_config.h` to define your **own UUIDs**.
-- Implement your **custom logic** for notifications and client writes.
-- Connect using **nRF Connect, Web Bluetooth, or a custom mobile app!**
-
-This GATT server is now **fully modular** and can be **easily adapted** for different BLE projects! 🎉
 
