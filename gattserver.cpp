@@ -12,11 +12,11 @@
   * data.
   *
   ****************************************************************************/
- #ifdef CONFIG_BT_ENABLED
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <memory.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -24,8 +24,10 @@
 #include "esp_event.h"
 #include "esp_system.h"
 #include "esp_log.h"
-#include "esp_bt.h"
 
+  //#ifdef CONFIG_BT_ENABLED
+
+#include "esp_bt.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
 #include "esp_bt_defs.h"
@@ -52,44 +54,27 @@ static esp_gatt_char_prop_t a_property = 0;
 static prepare_type_env_t a_prepare_write_env;
 static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
 
-#ifndef ONLY_USE_A
-#define PROFILE_B_APP_ID 1
-#define GATTS_SERVICE_UUID_TEST_B 0x00EE
-#define GATTS_CHAR_UUID_TEST_B 0xEE01
-#define GATTS_DESCR_UUID_TEST_B 0x2222
-#define GATTS_NUM_HANDLE_TEST_B 4
-static esp_gatt_char_prop_t b_property = 0;
-static prepare_type_env_t b_prepare_write_env;
-static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
-#endif
-
-#ifdef ONLY_USE_A
 #define PROFILE_NUM 1
-#else
-#define PROFILE_NUM 2
-#endif
-
 #define TEST_MANUFACTURER_DATA_LEN 17
-
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX 0x40
-
 #define PREPARE_BUF_MAX_SIZE 1024
-
 #define WRITE_EVENT_ID 1234566
 #define POST_WAIT_MS 5
 
 typedef struct gatt_param_t
 {
-    esp_bt_uuid_t uuid; 
+    esp_bt_uuid_t uuid;
     char name[20];     // Characteristic Name
     gatt_param_type_t type; // Data type (int, float, string)
     union
     {
-        uint8_t uint8_val;
+        uint8_t uint8_val[GATT_MAX_VALUE_SIZE];
         int int_val;
         float float_val;
-        char str_val[32]; // String storage
+        char str_val[GATT_MAX_VALUE_SIZE]; // String storage
     } value;
+    uint16_t value_size;       // Size of the value
+    uint16_t value_max_size;   // Size of the value
     esp_gatt_perm_t perm;      // Read/Write Permissions
     esp_gatt_char_prop_t prop; // Properties (Read, Write, Notify)
     uint16_t handle;           // BLE characteristic handle
@@ -99,31 +84,13 @@ typedef struct gatt_param_t
     esp_event_base_t loop_base;
 } gatt_param_t;
 
-#define MAX_PARAMS 10
-static gatt_param_t gatt_params[MAX_PARAMS];
+static gatt_param_t gatt_params[GATT_MAX_PARAMS];
 static int param_count = 0;
 
 static size_t gatts_chars_idx = 0;
 static uint8_t adv_config_done = 0;
 #define adv_config_flag (1 << 0)
 #define scan_rsp_config_flag (1 << 1)
-
-// #define CONFIG_EXAMPLE_SET_RAW_ADV_DATA
-#ifdef CONFIG_EXAMPLE_SET_RAW_ADV_DATA
-static uint8_t raw_adv_data[] = {
-    /* Flags */
-    0x02, ESP_BLE_AD_TYPE_FLAG, 0x06, // Length 2, Data Type ESP_BLE_AD_TYPE_FLAG, Data 1 (LE General Discoverable Mode, BR/EDR Not Supported)
-    /* TX Power Level */
-    0x02, ESP_BLE_AD_TYPE_TX_PWR, 0xEB, // Length 2, Data Type ESP_BLE_AD_TYPE_TX_PWR, Data 2 (-21)
-    /* Complete 16-bit Service UUIDs */
-    0x03, ESP_BLE_AD_TYPE_16SRV_CMPL, 0xAB, 0xCD // Length 3, Data Type ESP_BLE_AD_TYPE_16SRV_CMPL, Data 3 (UUID)
-};
-
-static uint8_t raw_scan_rsp_data[] = {
-    /* Complete Local Name */
-    0x0F, ESP_BLE_AD_TYPE_NAME_CMPL, 'E', 'S', 'P', '_', 'G', 'A', 'T', 'T', 'S', '_', 'D', 'E', 'M', 'O' // Length 15, Data Type ESP_BLE_AD_TYPE_NAME_CMPL, Data (ESP_GATTS_DEMO)
-};
-#else
 
 // The length of adv data must be less than 31 bytes
 // static uint8_t test_manufacturer[TEST_MANUFACTURER_DATA_LEN] =  {0x12, 0x23, 0x45, 0x56};
@@ -155,8 +122,6 @@ static esp_ble_adv_data_t scan_rsp_data = {
     .p_service_data = NULL,
     .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
 };
-
-#endif /* CONFIG_SET_RAW_ADV_DATA */
 
 static esp_ble_adv_params_t adv_params = {
     .adv_int_min = 0x20,
@@ -473,22 +438,27 @@ void add_parameter(gatts_profile_inst* profile_inst)
 
     switch (par->type)
     {
-    case PARAM_TYPE_INT:
-        attr_value.attr_max_len = sizeof(int);
-        attr_value.attr_len = sizeof(int);
+    case GATT_PARAM_TYPE_INT:
+        attr_value.attr_max_len = par->value_size;
+        attr_value.attr_len = par->value_size;
         attr_value.attr_value = (uint8_t*)&par->value.int_val;
         break;
 
-    case PARAM_TYPE_FLOAT:
-        attr_value.attr_max_len = sizeof(float);
-        attr_value.attr_len = sizeof(float);
+    case GATT_PARAM_TYPE_FLOAT:
+        attr_value.attr_max_len = par->value_size;
+        attr_value.attr_len = par->value_size;
         attr_value.attr_value = (uint8_t*)&par->value.float_val;
         break;
 
-    case PARAM_TYPE_STRING:
+    case GATT_PARAM_TYPE_STRING:
         attr_value.attr_max_len = sizeof(par->value.str_val);
         attr_value.attr_len = strlen(par->value.str_val);
         attr_value.attr_value = (uint8_t*)par->value.str_val;
+        break;
+    case GATT_PARAM_TYPE_GENERIC:
+        attr_value.attr_max_len = par->value_size;
+        attr_value.attr_len = par->value_size;
+        attr_value.attr_value = par->value.uint8_val;
         break;
     }
 
@@ -595,30 +565,12 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         {
             par->handle = param->add_char.attr_handle;
 
-            // Determine correct attribute size based on data type
-            size_t attr_size = 0;
-            switch (par->type)
-            {
-            case PARAM_TYPE_INT:
-                attr_size = sizeof(int);
-                break;
-            case PARAM_TYPE_FLOAT:
-                attr_size = sizeof(float);
-                break;
-            case PARAM_TYPE_STRING:
-                attr_size = sizeof(par->value.str_val); // Full string buffer
-                break;
-            default:
-                ESP_LOGW(GATTS_TAG, "Unknown data type for characteristic %s", par->name);
-                break;
-            }
-
             // Update attribute max size dynamically
             esp_attr_value_t attr_value;
             memset(&attr_value, 0, sizeof(esp_attr_value_t));
-            attr_value.attr_max_len = attr_size;
-            attr_value.attr_len = attr_size;
-            attr_value.attr_value = (uint8_t*)&par->value.uint8_val;
+            attr_value.attr_max_len = par->value_max_size;
+            attr_value.attr_len = par->value_size;
+            attr_value.attr_value = par->value.uint8_val;
 
             esp_ble_gatts_set_attr_value(par->handle, attr_value.attr_len, attr_value.attr_value);
 
@@ -631,7 +583,7 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
             //     add_parameter(&gl_profile_tab[PROFILE_A_APP_ID]);
             // }
             ESP_LOGI(GATTS_TAG, "Characteristic %s (UUID: 0x%X) - Properties: 0x%X, Max Length: %d, handle: %d",
-                par->name, par->uuid.uuid.uuid16, par->prop, attr_size, par->handle);
+                par->name, par->uuid.uuid.uuid16, par->prop, par->value_size, par->handle);
             ESP_LOGI(GATTS_TAG, "    Notify  : %s", (par->prop & ESP_GATT_CHAR_PROP_BIT_NOTIFY) ? "Yes" : "No");
             ESP_LOGI(GATTS_TAG, "    Indicate: %s", (par->prop & ESP_GATT_CHAR_PROP_BIT_INDICATE) ? "Yes" : "No");
             ESP_LOGI(GATTS_TAG, "    Read    : %s", (par->perm & ESP_GATT_PERM_READ) ? "Yes" : "No");
@@ -669,17 +621,21 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
             {
                 switch (gatt_params[i].type)
                 {
-                case PARAM_TYPE_INT:
+                case GATT_PARAM_TYPE_INT:
                     rsp.attr_value.len = sizeof(int);
                     memcpy(rsp.attr_value.value, &gatt_params[i].value.int_val, sizeof(int));
                     break;
-                case PARAM_TYPE_FLOAT:
+                case GATT_PARAM_TYPE_FLOAT:
                     rsp.attr_value.len = sizeof(float);
                     memcpy(rsp.attr_value.value, &gatt_params[i].value.float_val, sizeof(float));
                     break;
-                case PARAM_TYPE_STRING:
+                case GATT_PARAM_TYPE_STRING:
                     rsp.attr_value.len = strlen(gatt_params[i].value.str_val);
                     memcpy(rsp.attr_value.value, gatt_params[i].value.str_val, rsp.attr_value.len);
+                    break;
+                case GATT_PARAM_TYPE_GENERIC:
+                    rsp.attr_value.len = gatt_params[i].value_size;
+                    memcpy(rsp.attr_value.value, gatt_params[i].value.uint8_val, rsp.attr_value.len);
                     break;
                 }
                 break;
@@ -724,18 +680,22 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
             {
                 switch (gatt_params[i].type)
                 {
-                case PARAM_TYPE_INT:
+                case GATT_PARAM_TYPE_INT:
                     memcpy(&gatt_params[i].value.int_val, param->write.value, sizeof(int));
                     ESP_LOGI(GATTS_TAG, "    Updated %s to %d", gatt_params[i].name, gatt_params[i].value.int_val);
                     break;
-                case PARAM_TYPE_FLOAT:
+                case GATT_PARAM_TYPE_FLOAT:
                     memcpy(&gatt_params[i].value.float_val, param->write.value, sizeof(float));
                     ESP_LOGI(GATTS_TAG, "    Updated %s to %.2f", gatt_params[i].name, gatt_params[i].value.float_val);
                     break;
-                case PARAM_TYPE_STRING:
+                case GATT_PARAM_TYPE_STRING:
                     strncpy(gatt_params[i].value.str_val, (char*)param->write.value, param->write.len);
                     gatt_params[i].value.str_val[param->write.len] = '\0';
                     ESP_LOGI(GATTS_TAG, "    Updated %s to %s", gatt_params[i].name, gatt_params[i].value.str_val);
+                    break;
+                case GATT_PARAM_TYPE_GENERIC:
+                    memcpy(gatt_params[i].value.uint8_val, param->write.value, param->write.len);
+                    ESP_LOGI(GATTS_TAG, "    Updated %s", gatt_params[i].name);
                     break;
                 }
 
@@ -849,21 +809,22 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     } while (0);
 }
 
-gatt_param_handle_t gattserver_register_generic(const char *name, const char* uuid_str,
-                                               gatt_param_type_t type, esp_gatt_perm_t perm,
-                                               esp_gatt_char_prop_t prop, const void *init_value, size_t value_size) {
-    if (!name || !uuid_str || !init_value || value_size == 0) {
+gatt_param_handle_t gattserver_register_generic(const char* name, const char* uuid_str,
+    gatt_param_type_t type, esp_gatt_perm_t perm,
+    esp_gatt_char_prop_t prop, const void* init_value, size_t value_size)
+{
+    if (!name || !uuid_str || !init_value || value_size == 0)
+    {
         ESP_LOGE(GATTS_TAG, "Invalid parameters for registering characteristic: %s", name);
         return NULL;
     }
 
-    if (param_count >= MAX_PARAMS) {
+    if (param_count >= GATT_MAX_PARAMS) {
         ESP_LOGE(GATTS_TAG, "Maximum number of parameters reached");
         return NULL;
     }
 
-    // Allocate and initialize new characteristic
-    gatt_param_t *param = &gatt_params[param_count++];
+    gatt_param_t* param = &gatt_params[param_count++];
     strncpy(param->name, name, sizeof(param->name) - 1);
     param->name[sizeof(param->name) - 1] = '\0';
     param->uuid = convert_uuid(uuid_str);
@@ -873,31 +834,61 @@ gatt_param_handle_t gattserver_register_generic(const char *name, const char* uu
     param->cccd_enabled = 0;
     param->handle = 0; // Will be set when added to GATT server
 
+    switch (param->type)
+    {
+    case GATT_PARAM_TYPE_INT:
+        param->value_size = sizeof(int);
+        param->value_max_size = sizeof(int);
+        param->value.int_val = *(int*)init_value;
+        break;
+
+    case GATT_PARAM_TYPE_FLOAT:
+        param->value_size = sizeof(float);
+        param->value_max_size = sizeof(float);
+        param->value.float_val = *(float*)init_value;
+        break;
+
+    case GATT_PARAM_TYPE_STRING:
+        param->value_size = strlen((char*)init_value);
+        param->value_max_size = sizeof(param->value.str_val);
+        if (param->value_size > sizeof(param->value.str_val))
+        {
+            ESP_LOGW(GATTS_TAG, "String value too long for %s, truncating", name);
+            param->value_size = sizeof(param->value.str_val);
+        }
+        strncpy(param->value.str_val, (char*)init_value, param->value_size);
+        break;
+    case GATT_PARAM_TYPE_GENERIC:
+        param->value_size = value_size;
+        param->value_max_size = sizeof(param->value.uint8_val);
+        memcpy(param->value.uint8_val, init_value, value_size);
+        break;
+
+    }
     return param;
 }
 
 
 gatt_param_handle_t gattserver_register_float(const char* name, const char* uuid_str,
     esp_gatt_perm_t perm, esp_gatt_char_prop_t prop, float init_value) {
-    return gattserver_register_generic(name, uuid_str, PARAM_TYPE_FLOAT, perm, prop, &init_value, sizeof(float));
+    return gattserver_register_generic(name, uuid_str, GATT_PARAM_TYPE_FLOAT, perm, prop, &init_value, sizeof(float));
 }
 
 gatt_param_handle_t gattserver_register_int(const char* name, const char* uuid_str,
     esp_gatt_perm_t perm, esp_gatt_char_prop_t prop, int init_value) {
-    return gattserver_register_generic(name, uuid_str, PARAM_TYPE_INT, perm, prop, &init_value, sizeof(int));
+    return gattserver_register_generic(name, uuid_str, GATT_PARAM_TYPE_INT, perm, prop, &init_value, sizeof(int));
 }
 
 gatt_param_handle_t gattserver_register_string(const char* name, const char* uuid_str,
     esp_gatt_perm_t perm, esp_gatt_char_prop_t prop, const char* init_value) {
-    return gattserver_register_generic(name, uuid_str, PARAM_TYPE_STRING, perm, prop, init_value, strlen(init_value));
+    return gattserver_register_generic(name, uuid_str, GATT_PARAM_TYPE_STRING, perm, prop, init_value, strlen(init_value));
 }
 
-esp_err_t gattserver_notify_int(gatt_param_handle_t handle, int new_value)
+esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t value_size)
 {
-    if (handle == NULL)
+    if (handle == NULL || new_value == NULL || value_size == 0)
         return ESP_FAIL;
 
-    handle->value.int_val = new_value;
     gatts_profile_inst* profile_inst = &gl_profile_tab[PROFILE_A_APP_ID];
 
     if (profile_inst->conn_id == ESP_GATT_IF_NONE)
@@ -909,34 +900,9 @@ esp_err_t gattserver_notify_int(gatt_param_handle_t handle, int new_value)
     if (handle->cccd_enabled != 0x0001 && handle->cccd_enabled != 0x0002)
         return ESP_FAIL;
 
-    printf("%s got gatt_if %d (notify int)\n", handle->name, profile_inst->gatts_if);
-
-    return esp_ble_gatts_send_indicate(profile_inst->gatts_if, profile_inst->conn_id,
-        handle->handle, sizeof(int),
-        (uint8_t*)&handle->value.int_val, false);
-}
-
-esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float new_value)
-{
-    if (handle == NULL)
-        return ESP_FAIL;
-
-    handle->value.float_val = new_value;
-    gatts_profile_inst* profile_inst = &gl_profile_tab[PROFILE_A_APP_ID];
-
-    if (profile_inst->conn_id == ESP_GATT_IF_NONE)
-    {
-        return ESP_FAIL;
-    }
-
-    if (handle->cccd_enabled != 0x0001 && handle->cccd_enabled != 0x0002)
-    {
-        return ESP_FAIL;
-    }
-
     esp_err_t err = esp_ble_gatts_send_indicate(profile_inst->gatts_if, profile_inst->conn_id,
-        handle->handle, sizeof(float),
-        (uint8_t*)&handle->value.float_val, false);
+        handle->handle, value_size,
+        (uint8_t*)new_value, false);
 
     if (err != ESP_OK)
     {
@@ -947,30 +913,19 @@ esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float new_value)
     return err;
 }
 
+esp_err_t gattserver_notify_int(gatt_param_handle_t handle, int new_value)
+{
+    return gattserver_notify(handle, &new_value, sizeof(int));
+}
+
+esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float new_value)
+{
+    return gattserver_notify(handle, &new_value, sizeof(float));
+}
+
 esp_err_t gattserver_notify_string(gatt_param_handle_t handle, const char* new_value)
 {
-    if (handle == NULL || new_value == NULL)
-        return ESP_FAIL;
-
-    strncpy(handle->value.str_val, new_value, sizeof(handle->value.str_val) - 1);
-    handle->value.str_val[sizeof(handle->value.str_val) - 1] = '\0';
-
-    gatts_profile_inst* profile_inst = &gl_profile_tab[PROFILE_A_APP_ID];
-
-    if (profile_inst->conn_id == ESP_GATT_IF_NONE)
-    {
-        ESP_LOGW(GATTS_TAG, "No client connected, skipping notification.");
-        return ESP_FAIL;
-    }
-
-    if (handle->cccd_enabled != 0x0001 && handle->cccd_enabled != 0x0002)
-        return ESP_FAIL;
-
-    printf("%s got gatt_if %d (notify string)\n", handle->name, profile_inst->gatts_if);
-
-    return esp_ble_gatts_send_indicate(profile_inst->gatts_if, profile_inst->conn_id,
-        handle->handle, strlen(handle->value.str_val),
-        (uint8_t*)handle->value.str_val, false);
+    return gattserver_notify(handle, new_value, strlen(new_value));
 }
 
 static void evloop_write_cb(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
@@ -1078,4 +1033,4 @@ void gattserver_init(const char* name, const char* service_uuid)
     return;
 }
 
-#endif //  CONFIG_BT_ENABLED
+//#endif //  CONFIG_BT_ENABLED

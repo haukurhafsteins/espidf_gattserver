@@ -4,12 +4,15 @@
 #include "esp_err.h"
 #include "esp_gatt_defs.h"
 
+#define GATT_MAX_PARAMS 20
+#define GATT_MAX_VALUE_SIZE 64
+
 typedef enum
 {
-    PARAM_TYPE_INT,
-    PARAM_TYPE_FLOAT,
-    PARAM_TYPE_STRING,
-    PARAM_TYPE_GENERIC
+    GATT_PARAM_TYPE_INT,
+    GATT_PARAM_TYPE_FLOAT,
+    GATT_PARAM_TYPE_STRING,
+    GATT_PARAM_TYPE_GENERIC
 } gatt_param_type_t;
 
 // Change gatt_param_handle_t to be a pointer to gatt_params[]
@@ -51,6 +54,13 @@ extern "C"
     gatt_param_handle_t gattserver_register_generic(const char *name, const char *uuid_str,
                                                     gatt_param_type_t type, esp_gatt_perm_t perm,
                                                     esp_gatt_char_prop_t prop, const void *init_value, size_t value_size);
+    
+    /// @brief Trigger a notification for a parameter
+    /// @param handle A handle to the parameter
+    /// @param new_value The new value to notify
+    /// @param value_size Size of the value
+    /// @return ESP_OK if successful, otherwise an error code
+    esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t value_size);
                                                     
     /// @brief Trigger a notification for a parameter
     /// @param handle A handle to the parameter
