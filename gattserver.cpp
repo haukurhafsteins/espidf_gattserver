@@ -39,8 +39,6 @@
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX               0x40
 
-static uint16_t profile_handle_table[GATT_MAX_PARAMS];
-
 static uint8_t ext_adv_raw_data[64] = {};
 size_t ext_adv_raw_data_len = 0;
 
@@ -108,52 +106,6 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
 // static const uint8_t char_prop_read_write_notify = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
 
 /* Full Database Description - Used to add attributes into the database */
-static size_t gatt_db_idx = 1; // O is taken for service id
-static esp_gatts_attr_db_t gatt_db[GATT_MAX_PARAMS] = {};
-// static const esp_gatts_attr_db_t gatt_db[HRS_IDX_NB] =
-// {
-//     // Service Declaration
-//     [IDX_SVC]        =
-//     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, ESP_GATT_PERM_READ,
-//       sizeof(uint16_t), sizeof(GATTS_SERVICE_UUID_TEST), (uint8_t *)&GATTS_SERVICE_UUID_TEST}},
-
-//     /* Characteristic Declaration */
-//     [IDX_CHAR_A]     =
-//     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
-//       CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-
-//     /* Characteristic Value */
-//     [IDX_CHAR_VAL_A] =
-//     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_TEST_A, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
-//       GATTS_DEMO_CHAR_VAL_LEN_MAX, sizeof(char_value), (uint8_t *)char_value}},
-
-//     /* Client Characteristic Configuration Descriptor */
-//     [IDX_CHAR_CFG_A]  =
-//     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
-//       sizeof(uint16_t), sizeof(heart_measurement_ccc), (uint8_t *)heart_measurement_ccc}},
-
-//     /* Characteristic Declaration */
-//     [IDX_CHAR_B]      =
-//     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
-//       CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read}},
-
-//     /* Characteristic Value */
-//     [IDX_CHAR_VAL_B]  =
-//     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_TEST_B, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
-//       GATTS_DEMO_CHAR_VAL_LEN_MAX, sizeof(char_value), (uint8_t *)char_value}},
-
-//     /* Characteristic Declaration */
-//     [IDX_CHAR_C]      =
-//     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
-//       CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_write}},
-
-//     /* Characteristic Value */
-//     [IDX_CHAR_VAL_C]  =
-//     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_TEST_C, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
-//       GATTS_DEMO_CHAR_VAL_LEN_MAX, sizeof(char_value), (uint8_t *)char_value}},
-
-// };
-
 typedef struct gatt_param_t
 {
     const char* name;
@@ -167,9 +119,7 @@ typedef struct gatt_param_t
     esp_event_loop_handle_t loop_handle;
     uint8_t char_property;
 
-    union {
-        uint16_t uuid16;
-    } uuid;
+    esp_bt_uuid_t uuid;
 
     union {
         float f;
@@ -180,6 +130,8 @@ typedef struct gatt_param_t
 } gatt_param_t;
 
 static gatt_param_t gatt_param[GATT_MAX_PARAMS] = {};
+static esp_gatts_attr_db_t gatt_db[GATT_MAX_PARAMS] = {};
+static size_t gatt_db_idx = 1; // O is taken for service id
 
 static char* esp_key_type_to_str(esp_ble_key_type_t key_type)
 {
@@ -419,17 +371,18 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
     case ESP_GATTS_WRITE_EVT:
         ESP_LOGI(GATTS_TAG, "ESP_GATTS_WRITE_EVT, write value:");
         esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
-        for (int i = 0; i < gatt_db_idx; i++) {
-            if (profile_handle_table[i] + 1 == param->write.handle) // CCCD is the next handle, see gattserver_register_generic
+        for (int i = 0; i < gatt_db_idx; i++) 
+        {
+            if (gatt_param[i].handle + 1 == param->write.handle) // CCCD is the next handle, see gattserver_register_generic
             {
                 uint16_t cccd_value = param->write.value[0] | (param->write.value[1] << 8);
                 gatt_param[i].cccd_enabled = cccd_value;
-                ESP_LOGI(GATTS_TAG, "Descriptor Parameter written: %s (UUID: 0x%X)", gatt_param[i].name, gatt_param[i].uuid.uuid16);
+                ESP_LOGI(GATTS_TAG, "Descriptor Parameter written: %s (UUID: 0x%X)", gatt_param[i].name, gatt_param[i].uuid.uuid.uuid16);
                 break;
             }
-            if (profile_handle_table[i] == param->write.handle) 
+            if (gatt_param[i].handle == param->write.handle) 
             {
-                ESP_LOGI(GATTS_TAG, "Parameter written: %s (UUID: 0x%X)", gatt_param[i].name, gatt_param[i].uuid.uuid16);
+                ESP_LOGI(GATTS_TAG, "Parameter written: %s (UUID: 0x%X)", gatt_param[i].name, gatt_param[i].uuid.uuid.uuid16);
                 if (gatt_param[i].write_cb) {
                     gatt_param[i].write_cb((gatt_param_handle_t)&gatt_param[i], param->write.value, param->write.len);
                 }
@@ -475,9 +428,10 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
         ESP_LOGI(GATTS_TAG, "The number handle = %x", param->add_attr_tab.num_handle);
         if (param->create.status == ESP_GATT_OK) {
             if (param->add_attr_tab.num_handle == gatt_db_idx) {
-                memcpy(profile_handle_table, param->add_attr_tab.handles,
-                    sizeof(profile_handle_table));
-                esp_ble_gatts_start_service(profile_handle_table[0]); //start the service, 0 is the index of the first service
+                for (int i=0;i<gatt_db_idx;i++) {
+                    gatt_param[i].handle = param->add_attr_tab.handles[i];
+                }
+                esp_ble_gatts_start_service(gatt_param[0].handle); //start the service, 0 is the index of the first service
             }
             else {
                 ESP_LOGE(GATTS_TAG, "Create attribute table abnormally, num_handle (%d) doesn't equal to gatt_db_idx(%d)",
@@ -549,7 +503,7 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     param = &gatt_param[gatt_db_idx];
     param->name = name;
     param->write_cb = NULL;
-    param->uuid.uuid16 = strtol(uuid_str, NULL, 16);
+    param->uuid.uuid.uuid16 = strtol(uuid_str, NULL, 16);
     param->char_property = prop;
 
     uint16_t value_max_size;
@@ -593,7 +547,7 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     param = &gatt_param[gatt_db_idx];
     param->name = name;
     param->write_cb = NULL;
-    param->uuid.uuid16 = character_declaration_uuid;
+    param->uuid.uuid.uuid16 = character_declaration_uuid;
     param->char_property = prop;
 
     // ---- Characteristic Property ----
@@ -611,9 +565,10 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     gatt_db_idx++;
 
     param = &gatt_param[gatt_db_idx];
+    gatt_param_handle_t ret_handle = (gatt_param_handle_t)param;
     param->name = name;
     param->write_cb = NULL;
-    param->uuid.uuid16 = strtol(uuid_str, NULL, 16);
+    param->uuid.uuid.uuid16 = strtol(uuid_str, NULL, 16);
     param->char_property = prop;
 
     // ---- Characteristic Value ----
@@ -621,7 +576,7 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
         .attr_control = {ESP_GATT_AUTO_RSP},
         .att_desc = {
             ESP_UUID_LEN_16,                        // Length of the UUID in bytes
-            (uint8_t*)&param->uuid.uuid16,          // UUID Character value
+            (uint8_t*)&param->uuid.uuid.uuid16,     // UUID Character value
             perm,                                   // Attribute permissions
             value_max_size,                         // Maximum length of the attribute
             (uint16_t)size,                         // Current length of the attribute
@@ -633,7 +588,7 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     param = &gatt_param[gatt_db_idx];
     param->name = name;
     param->write_cb = NULL;
-    param->uuid.uuid16 = character_client_config_uuid;
+    param->uuid.uuid.uuid16 = character_client_config_uuid;
     param->char_property = prop;
 
     // ---- Client Characteristic Configuration Descriptor ----
@@ -653,7 +608,7 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
         };
         gatt_db_idx++;
     }
-    return (gatt_param_handle_t)param;
+    return (gatt_param_handle_t)ret_handle;
 }
 
 gatt_param_handle_t gattserver_register_float(const char* name, const char* uuid_str,
@@ -690,12 +645,12 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, s
     if (handle->cccd_enabled != 0x0001 && handle->cccd_enabled != 0x0002)
     {
         ESP_LOGW(GATTS_TAG, "Client has not enabled notifications/indications for %s (UUID: 0x%X)",
-            handle->name, handle->uuid.uuid16);
+            handle->name, handle->uuid.uuid.uuid16);
         return ESP_FAIL;
     }
 
     ESP_LOGI(GATTS_TAG, "Sending notification for %s (UUID: 0x%X), value size %d",
-        handle->name, handle->uuid.uuid16, value_size);
+        handle->name, handle->uuid.uuid.uuid16, value_size);
     esp_err_t err = esp_ble_gatts_send_indicate(profile_inst->gatts_if, profile_inst->conn_id,
         handle->handle, value_size, (uint8_t*)new_value, false);
 
@@ -729,7 +684,7 @@ static void evloop_write_cb(void* arg, esp_event_base_t event_base, int32_t even
     gatt_param_handle_t handle = (gatt_param_handle_t)param;
     if (param)
     {
-        ESP_LOGI(GATTS_TAG, "Executing write callback for %s (UUID: 0x%X)", param->name, param->uuid.uuid16);
+        ESP_LOGI(GATTS_TAG, "Executing write callback for %s (UUID: 0x%X)", param->name, param->uuid.uuid.uuid16);
         param->write_cb(handle, &param->attr->att_desc.value, param->attr->att_desc.length);
     }
 }
@@ -751,7 +706,7 @@ esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, esp_event_loo
         &evloop_write_cb, param, NULL);
     if (err != ESP_OK)
     {
-        ESP_LOGE(GATTS_TAG, "Failed to register write callback for %s (UUID: 0x%X)", param->name, param->uuid.uuid16);
+        ESP_LOGE(GATTS_TAG, "Failed to register write callback for %s (UUID: 0x%X)", param->name, param->uuid.uuid.uuid16);
     }
     return err;
 }
