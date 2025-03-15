@@ -4,7 +4,7 @@
 #include "esp_err.h"
 #include "esp_gatt_defs.h"
 
-#define GATT_MAX_PARAMS 20
+#define GATT_MAX_PARAMS 60
 #define GATT_MAX_VALUE_SIZE 64
 
 typedef enum
@@ -18,6 +18,11 @@ typedef enum
 // Change gatt_param_handle_t to be a pointer to gatt_params[]
 typedef struct gatt_param_t gatt_param_t;
 typedef gatt_param_t *gatt_param_handle_t;
+
+/// @brief Callback for client writes
+/// @param handle Parameter handle
+/// @param value The new value
+/// @param len Size of the value
 typedef void (*gatt_write_cb_t)(gatt_param_handle_t handle, void *value, size_t len);
 
 #ifdef __cplusplus
