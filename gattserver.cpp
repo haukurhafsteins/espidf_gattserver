@@ -13,6 +13,7 @@
 #include "esp_system.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+#ifdef CONFIG_BT_ENABLED
 #include "esp_bt.h"
 
 #include "esp_gap_ble_api.h"
@@ -369,13 +370,13 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
         ESP_LOGI(GATTS_TAG, "ESP_GATTS_READ_EVT");
         break;
     case ESP_GATTS_WRITE_EVT:
-        ESP_LOGI(GATTS_TAG, "ESP_GATTS_WRITE_EVT, handle: %d, write value:", param->write.handle);
-        esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
+        // ESP_LOGI(GATTS_TAG, "ESP_GATTS_WRITE_EVT, handle: %d, write value:", param->write.handle);
         for (int i = 0; i < gatt_db_idx; i++) 
         {
             if (gatt_param[i].handle == param->write.handle) 
             {
-                ESP_LOGI(GATTS_TAG, "Parameter written: %s (UUID: 0x%X)", gatt_param[i].name, gatt_param[i].uuid.uuid.uuid16);
+                //ESP_LOGI(GATTS_TAG, "Parameter written: %s (UUID: 0x%X)", gatt_param[i].name, gatt_param[i].uuid.uuid.uuid16);
+                //esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
                 memcpy(gatt_db[i].att_desc.value, param->write.value, param->write.len);
                 if (gatt_param[i].write_cb) {
                     gatt_param[i].write_cb((gatt_param_handle_t)&gatt_param[i], param->write.value, param->write.len);
@@ -425,7 +426,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
                 printf("Attribute table: \n");
                 for (int i=0;i<gatt_db_idx;i++) {
                     gatt_param[i].handle = param->add_attr_tab.handles[i];
-                    printf("Handle: %d, UUID: 0x%X, Name: %s\n", gatt_param[i].handle, gatt_param[i].uuid.uuid.uuid16, gatt_param[i].name ? gatt_param[i].name : "No name");
+                    // printf("Handle: %d, UUID: 0x%X, Name: %s\n", gatt_param[i].handle, gatt_param[i].uuid.uuid.uuid16, gatt_param[i].name ? gatt_param[i].name : "No name");
                 }
                 esp_ble_gatts_start_service(gatt_param[0].handle); //start the service, 0 is the index of the first service
             }
@@ -644,8 +645,8 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, s
         return ESP_FAIL;
     }
 
-    ESP_LOGI(GATTS_TAG, "Sending notification for %s (UUID: 0x%X), value size %d",
-        handle->name, handle->uuid.uuid.uuid16, value_size);
+    // ESP_LOGI(GATTS_TAG, "Sending notification for %s (UUID: 0x%X), value size %d",
+    //    handle->name, handle->uuid.uuid.uuid16, value_size);
     esp_err_t err = esp_ble_gatts_send_indicate(profile_inst->gatts_if, profile_inst->conn_id,
         handle->handle, value_size, (uint8_t*)new_value, false);
 
@@ -826,3 +827,4 @@ void gattserver_init(const char* name, const char* service_uuid)
      */
     ESP_LOGI(GATTS_TAG, "Gattserver initialized, characters: %d", gatt_db_idx);
 }
+#endif
