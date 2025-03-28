@@ -5,7 +5,6 @@
 #include "esp_gatt_defs.h"
 
 #define GATT_MAX_PARAMS 60
-#define GATT_MAX_VALUE_SIZE 64
 
 typedef enum
 {
@@ -81,8 +80,9 @@ extern "C"
     /// @param base Evloop base
     /// @param cb The callback
     /// @return ESP_OK if successful, otherwise an error code
-    esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, esp_event_loop_handle_t loop_handle, esp_event_base_t base, gatt_write_cb_t cb);
+    esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, esp_event_loop_handle_t loop_handle, esp_event_base_t base, uint32_t event_id, gatt_write_cb_t cb);
 
+    void gattserver_set_debug(bool debug);
 #ifdef __cplusplus
 }
 #endif

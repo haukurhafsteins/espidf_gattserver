@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <memory.h>
 #include <inttypes.h>
+#include <map>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -92,16 +93,11 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
 
 };
 
-/* Service */
-// static const uint16_t GATTS_SERVICE_UUID_TEST = 0x00FF;
-// static const uint16_t GATTS_CHAR_UUID_TEST_A = 0xFF01;
-// static const uint16_t GATTS_CHAR_UUID_TEST_B = 0xFF02;
-// static const uint16_t GATTS_CHAR_UUID_TEST_C = 0xFF03;
-
-// static const uint8_t heart_measurement_ccc[2] = { 0x00, 0x00 };
-// static const uint8_t char_value[4] = { 0x11, 0x22, 0x33, 0x44 };
 #define CHAR_DECLARATION_SIZE       (sizeof(uint8_t))
 // #define SVC_INST_ID                 0
+static const uint16_t CHARACTER_DECLARATION_UUID = ESP_GATT_UUID_CHAR_DECLARE;
+static const uint16_t CHARACTER_CLIENT_CONFIG_UUID = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
+static const uint16_t PRIMARY_SERVICE_UUID = ESP_GATT_UUID_PRI_SERVICE;
 
 // static const uint8_t char_prop_read = ESP_GATT_CHAR_PROP_BIT_READ;
 // static const uint8_t char_prop_write = ESP_GATT_CHAR_PROP_BIT_WRITE;
@@ -111,7 +107,9 @@ static const uint8_t CHAR_PROP_READ_WRITE_NOTIFY = ESP_GATT_CHAR_PROP_BIT_WRITE 
 typedef struct gatt_param_t
 {
     const char* name;
-    esp_gatts_attr_db_t* attr;
+    esp_gatts_attr_db_t* propAttr;
+    esp_gatts_attr_db_t* valueAttr;
+    esp_gatts_attr_db_t* descrAttr;
 
     /// @brief Callback parameters for writing
     gatt_write_cb_t write_cb;
@@ -133,7 +131,12 @@ typedef struct gatt_param_t
     } value;
 } gatt_param_t;
 
-static gatt_param_t gatt_param[GATT_MAX_PARAMS] = {};
+/// @brief  GATT parameter map. Key is the UUID of the characteristic
+/// @note   UUIDs are 16-bit numbers, so the map is limited to 65536 entries
+/// @note   The map is not thread-safe.
+static std::map<uint16_t, gatt_param_t> gatt_map;
+static std::map<uint16_t, uint16_t> handle2uuid_map;
+//static gatt_param_t gatt_param[GATT_MAX_PARAMS] = {};
 static esp_gatts_attr_db_t gatt_db[GATT_MAX_PARAMS] = {};
 static size_t gatt_db_idx = 1; // O is taken for service id
 static bool debug = false;
@@ -468,45 +471,92 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
         ESP_LOGI(GATTS_TAG, "ESP_GATTS_REG_EVT");
         //generate a resolvable random address
         esp_ble_gap_config_local_privacy(true);
+        for (size_t i = 0; i < gatt_db_idx; i++) {
+            if (gatt_db[i].att_desc.uuid_p == NULL) {
+                ESP_LOGE(GATTS_TAG, "gatt_db[%d] has NULL UUID pointer!", i);
+            } else {
+                uint16_t uuid = *((uint16_t*)gatt_db[i].att_desc.uuid_p);
+                ESP_LOGI(GATTS_TAG, "gatt_db[%d] UUID: 0x%04X", i, uuid);
+            }
+        }
         esp_ble_gatts_create_attr_tab(gatt_db, gatts_if, gatt_db_idx, 0);
         break;
     case ESP_GATTS_READ_EVT:
         ESP_LOGI(GATTS_TAG, "ESP_GATTS_READ_EVT");
         break;
     case ESP_GATTS_WRITE_EVT:
+    {
         ESP_LOGI(GATTS_TAG, "ESP_GATTS_WRITE_EVT, handle: %d", param->write.handle);
-        for (int i = 0; i < gatt_db_idx; i++)
-        {
-            if (gatt_param[i].handle == param->write.handle)
-            {
-                gatt_param_t* gp = &gatt_param[i];
-                if (debug)
-                {
-                    ESP_LOGI(GATTS_TAG, "Parameter written: \"%s\" (UUID: 0x%X), handle: %d,  %p", gp->name, gp->uuid.uuid.uuid16, gp->handle, gp->write_cb);
-                    ESP_LOG_BUFFER_HEXDUMP(GATTS_TAG, param->write.value, param->write.len, ESP_LOG_INFO);
-                }
-                if (param->write.len <= gp->attr->att_desc.max_length)
-                    memcpy(gatt_db[i].att_desc.value, param->write.value, param->write.len);
-                else 
-                {
-                    ESP_LOGE(GATTS_TAG, "Write value too long for \"%s\", %d > %d (max)", gp->name, param->write.len, gp->attr->att_desc.max_length);
-                    break;
-                }
 
-                if (gp->write_cb)
-                {
-                    if (gp->loop_handle == NULL)
-                        ESP_ERROR_CHECK(esp_event_post(gp->loop_base, gp->event_id, param->write.value, param->write.len, pdMS_TO_TICKS(POST_WAIT_MS)));
-                    ESP_ERROR_CHECK(esp_event_post_to(gp->loop_handle, gp->loop_base, gp->event_id, param->write.value, param->write.len, pdMS_TO_TICKS(POST_WAIT_MS)));
-                }
-                else if (debug)
-                {
-                    ESP_LOGI(GATTS_TAG, "No write callback for \"%s\"", gp->name);
-                }
+        // Get the UUID from the handle
+        auto it = handle2uuid_map.find(param->write.handle);
+        if (it == handle2uuid_map.end())
+        {
+            ESP_LOGE(GATTS_TAG, "Handle %d not found in handle2uuid_map", param->write.handle);
+            break;
+        }
+        uint16_t uuid = it->second;
+
+        // Check if the write is for the CCCD
+        if (uuid == ESP_GATT_UUID_CHAR_CLIENT_CONFIG)
+        {
+            uint16_t value_handle = param->write.handle - 1;
+            auto it1 = handle2uuid_map.find(value_handle);
+            if (it1 == handle2uuid_map.end())
+            {
+                ESP_LOGE(GATTS_TAG, "Handle %d not found in handle2uuid_map", value_handle);
                 break;
             }
+            uint16_t uuid = it1->second;
+            auto it3 = gatt_map.find(uuid);
+            if (it3 == gatt_map.end())
+            {
+                ESP_LOGE(GATTS_TAG, "UUID %04X not found in gatt_map", uuid);
+                break;
+            }
+            gatt_param_t* gp = &it3->second;
+            ESP_LOGI(GATTS_TAG, "CCCD handle: %d, value handle: %d", param->write.handle, value_handle);
+            gp->cccd_enabled = *(uint16_t*)param->write.value;
+            break;
+        }
+
+        ESP_LOGI(GATTS_TAG, "ESP_GATTS_WRITE_EVT, characteristic handle: %d", param->write.handle);
+
+        // Find the gatt_param_t from the map using the UUID
+        auto it2 = gatt_map.find(uuid);
+        if (it2 == gatt_map.end())
+        {
+            ESP_LOGE(GATTS_TAG, "UUID %04X not found in gatt_map", uuid);
+            break;
+        }
+        gatt_param_t* gp = &it2->second;
+        if (param->write.len <= gp->valueAttr->att_desc.max_length)
+        {
+            memcpy(gp->valueAttr->att_desc.value, param->write.value, param->write.len);
+            if (debug)
+            {
+                ESP_LOGI(GATTS_TAG, "Parameter written: \"%s\" (UUID: 0x%X), handle: %d,  %p", gp->name, gp->uuid.uuid.uuid16, gp->handle, gp->write_cb);
+                ESP_LOG_BUFFER_HEXDUMP(GATTS_TAG, param->write.value, param->write.len, ESP_LOG_INFO);
+            }
+        }
+        else
+        {
+            ESP_LOGE(GATTS_TAG, "Write value too long for \"%s\", %d > %d (max)", gp->name, param->write.len, gp->valueAttr->att_desc.max_length);
+            break;
+        }
+
+        if (gp->write_cb)
+        {
+            if (gp->loop_handle == NULL)
+                ESP_ERROR_CHECK(esp_event_post(gp->loop_base, gp->event_id, param->write.value, param->write.len, pdMS_TO_TICKS(POST_WAIT_MS)));
+            ESP_ERROR_CHECK(esp_event_post_to(gp->loop_handle, gp->loop_base, gp->event_id, param->write.value, param->write.len, pdMS_TO_TICKS(POST_WAIT_MS)));
+        }
+        else if (debug)
+        {
+            ESP_LOGI(GATTS_TAG, "No write callback for \"%s\"", gp->name);
         }
         break;
+    }
     case ESP_GATTS_EXEC_WRITE_EVT:
         break;
     case ESP_GATTS_MTU_EVT:
@@ -546,15 +596,37 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
         if (param->create.status == ESP_GATT_OK) {
             if (param->add_attr_tab.num_handle == gatt_db_idx) {
                 if (debug) ESP_LOGI(GATTS_TAG, "Create attribute table, handles = %d, Service uuid type %04X, Status %X", param->add_attr_tab.num_handle, param->add_attr_tab.svc_uuid.uuid.uuid16, param->add_attr_tab.status);
-                for (int i = 0;i < gatt_db_idx;i++) {
-                    gatt_param_t* gp = &gatt_param[i];
-                    gp->handle = param->add_attr_tab.handles[i];
-                    if (debug)
+                for (int i = 0; i < param->add_attr_tab.num_handle; i++) {
+                    uint16_t uuid = *((uint16_t*)gatt_db[i].att_desc.uuid_p);
+                
+                    handle2uuid_map[param->add_attr_tab.handles[i]] = uuid;
+                    
+                    if (uuid == ESP_GATT_UUID_PRI_SERVICE)
                     {
-                        ESP_LOGI(GATTS_TAG, "    %3d:  \"%20s\"  %04X  %8s  %22s  %17s  %p", gp->handle, gp->name, gp->uuid.uuid.uuid16, type_to_string(gp->type), permission_to_string(gp->attr), property_to_string(gp->char_property), gp->write_cb);
+                        esp_ble_gatts_start_service(param->add_attr_tab.handles[i]);
+                        continue;
+                    }
+                    else if (uuid == ESP_GATT_UUID_CHAR_DECLARE ||
+                        uuid == ESP_GATT_UUID_CHAR_CLIENT_CONFIG) {
+                        continue;
+                    }
+                
+                    auto it = gatt_map.find(uuid);
+                    if (it == gatt_map.end()) {
+                        ESP_LOGE(GATTS_TAG, "UUID %04X not found in gatt_map", uuid);
+                        continue;
+                    }
+                
+                    gatt_param_t* gp = &it->second;
+                    gp->handle = param->add_attr_tab.handles[i];
+
+                    if (debug) {
+                        ESP_LOGI(GATTS_TAG, "    %3d:  \"%20s\"  %04X  %8s  %22s  %17s  %p",
+                            gp->handle, gp->name, gp->uuid.uuid.uuid16,
+                            type_to_string(gp->type), permission_to_string(gp->valueAttr),
+                            property_to_string(gp->char_property), gp->write_cb);
                     }
                 }
-                esp_ble_gatts_start_service(gatt_param[0].handle); //start the service, 0 is the index of the first service
             }
             else {
                 ESP_LOGE(GATTS_TAG, "Create attribute table abnormally, num_handle (%d) doesn't equal to gatt_db_idx(%d)",
@@ -606,9 +678,6 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     gatt_param_type_t type, esp_gatt_perm_t perm,
     esp_gatt_char_prop_t prop, const void* initial_value_ptr, size_t size)
 {
-    static const uint16_t CHARACTER_DECLARATION_UUID = ESP_GATT_UUID_CHAR_DECLARE;
-    static const uint16_t CHARACTER_CLIENT_CONFIG_UUID = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
-
     if (debug)
         ESP_LOGI(GATTS_TAG, "Registering characteristic: \"%s\". UUID: %s, Perm: %X, Prop: %X, Size: %d, idx: %d",
             name, uuid_str, perm, prop, size, gatt_db_idx);
@@ -625,7 +694,21 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
         return NULL;
     }
 
-    gatt_param_t* gp = &gatt_param[gatt_db_idx];
+    char* endptr;
+    long parsed = strtol(uuid_str, &endptr, 16);
+    if (*endptr != '\0' || parsed < 0 || parsed > 0xFFFF) {
+        ESP_LOGE(GATTS_TAG, "Invalid UUID string: %s", uuid_str);
+        return NULL;
+    }
+    uint16_t uuid = static_cast<uint16_t>(parsed);
+
+    if (gatt_map.find(uuid) != gatt_map.end())
+    {
+        ESP_LOGE(GATTS_TAG, "UUID %04X already registered", uuid);
+        return NULL;
+    }
+    gatt_map[uuid] = { 0 };
+    gatt_param_t* gp = &gatt_map[uuid];
 
     uint16_t value_max_size;
     switch (type)
@@ -663,36 +746,29 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
         break;
     }
 
-    // ---- Characteristic Property ----
     gp->name = name;
     gp->type = type;
-    gp->attr = &gatt_db[gatt_db_idx];
-    gp->uuid.uuid.uuid16 = CHARACTER_DECLARATION_UUID;
-    gp->char_property = CHAR_PROP_READ_WRITE_NOTIFY;
+    gp->uuid.uuid.uuid16 = uuid;
+    gp->char_property = prop;
 
-    gatt_db[gatt_db_idx] = {
+    // ---- Characteristic Property ----
+    gp->propAttr = &gatt_db[gatt_db_idx];
+    *gp->propAttr = {
         .attr_control = {ESP_GATT_AUTO_RSP},
         .att_desc = {
             ESP_UUID_LEN_16,                        // Length of the UUID in bytes
-            (uint8_t*)&gp->uuid.uuid.uuid16,        // UUID Character declaration
+            (uint8_t*)&CHARACTER_DECLARATION_UUID,  // UUID Character declaration
             ESP_GATT_PERM_READ,                     // Attribute permissions
             CHAR_DECLARATION_SIZE,                  // Maximum length of the attribute
             CHAR_DECLARATION_SIZE,                  // Current length of the attribute
-            (uint8_t*)&gp->char_property            // Pointer to the value of the attribute
+            (uint8_t*)&CHAR_PROP_READ_WRITE_NOTIFY  // Pointer to the value of the attribute
         }
     };
     gatt_db_idx++;
 
     // ---- Characteristic Value ----
-    gp = &gatt_param[gatt_db_idx];
-    gatt_param_handle_t ret_handle = (gatt_param_handle_t)gp; // Return this handle to the user
-    gp->name = name;
-    gp->type = type;
-    gp->attr = &gatt_db[gatt_db_idx];
-    gp->uuid.uuid.uuid16 = strtol(uuid_str, NULL, 16);
-    gp->char_property = prop;
-
-    gatt_db[gatt_db_idx] = {
+    gp->valueAttr = &gatt_db[gatt_db_idx];
+    *gp->valueAttr = {
         .attr_control = {ESP_GATT_AUTO_RSP},
         .att_desc = {
             ESP_UUID_LEN_16,                        // Length of the UUID in bytes
@@ -706,29 +782,23 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     gatt_db_idx++;
 
     // ---- Client Characteristic Configuration Descriptor ----
-    gp = &gatt_param[gatt_db_idx];
-    gp->name = name;
-    gp->type = type;
-    gp->attr = &gatt_db[gatt_db_idx];
-    gp->uuid.uuid.uuid16 = CHARACTER_CLIENT_CONFIG_UUID;
-    gp->char_property = prop;
-
-    if (prop | ESP_GATT_CHAR_PROP_BIT_NOTIFY | ESP_GATT_CHAR_PROP_BIT_INDICATE)
+    if (prop & (ESP_GATT_CHAR_PROP_BIT_NOTIFY | ESP_GATT_CHAR_PROP_BIT_INDICATE))
     {
-        gatt_db[gatt_db_idx] = {
+        gp->descrAttr = &gatt_db[gatt_db_idx];
+        *gp->descrAttr = {
             .attr_control = {ESP_GATT_AUTO_RSP},
             .att_desc = {
                 ESP_UUID_LEN_16,                        // Length of the UUID in bytes
-                (uint8_t*)&gp->uuid.uuid.uuid16,        // UUID Client Characteristic Configuration
+                (uint8_t*)&CHARACTER_CLIENT_CONFIG_UUID,// UUID Client Characteristic Configuration
                 ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,// Attribute permissions
                 sizeof(uint16_t),                       // Maximum length of the attribute
-                sizeof(uint16_t),                       // Current length of the attribute
-                (uint8_t*)&ret_handle->cccd_enabled     // Pointer to the value of the attribute
+                sizeof(gp->cccd_enabled),               // Current length of the attribute
+                (uint8_t*)&gp->cccd_enabled             // Pointer to the value of the attribute
             }
         };
         gatt_db_idx++;
     }
-    return (gatt_param_handle_t)ret_handle;
+    return (gatt_param_handle_t)gp;
 }
 
 gatt_param_handle_t gattserver_register_float(const char* name, const char* uuid_str,
@@ -807,7 +877,7 @@ static void evloop_write_cb(void* arg, esp_event_base_t event_base, int32_t even
     if (gp)
     {
         ESP_LOGI(GATTS_TAG, "Executing write callback for %s (UUID: 0x%X)", gp->name, gp->uuid.uuid.uuid16);
-        gp->write_cb(handle, gp->attr->att_desc.value, gp->attr->att_desc.length);
+        gp->write_cb(handle, gp->valueAttr->att_desc.value, gp->valueAttr->att_desc.length);
     }
 }
 
@@ -878,16 +948,19 @@ void gattserver_init(const char* name, const char* service_uuid)
     ext_adv_raw_data[i++] = uuid.uuid.uuid16 >> 8;
     ext_adv_raw_data_len = i;
 
-    static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
-
-    esp_gatts_attr_db_t service = {
+    gatt_db[0] = {
         .attr_control = {ESP_GATT_AUTO_RSP},
-        .att_desc = {ESP_UUID_LEN_16, (uint8_t*)&primary_service_uuid, ESP_GATT_PERM_READ,
-            sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&uuid.uuid.uuid16}
+        .att_desc = {
+            .uuid_length = ESP_UUID_LEN_16,
+            .uuid_p = (uint8_t*)&PRIMARY_SERVICE_UUID,
+            .perm = ESP_GATT_PERM_READ,
+            .max_length = sizeof(uint16_t),
+            .length = sizeof(uint16_t),
+            .value = (uint8_t*)&uuid.uuid.uuid16
+        }
     };
-    gatt_db[0] = service;
-    gatt_param[0].name = name;
-    gatt_param[0].uuid = uuid;
+
+    printf("uuid: %04X\n", *gatt_db[0].att_desc.value);
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
