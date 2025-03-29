@@ -29,9 +29,8 @@
 #define PROFILE_A_APP_ID 0
 
 #define PROFILE_NUM                               1
-#define HEART_PROFILE_APP_IDX                     0
-#define URU_APP_ID                                0x55
-#define HEART_RATE_SVC_INST_ID                    0
+#define PROFILE_APP_IDX                           0
+#define APP_ID                                    0x55
 #define EXT_ADV_HANDLE                            0
 #define NUM_EXT_ADV_SET                           1
 #define EXT_ADV_DURATION                          0
@@ -86,10 +85,10 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
 
 /* One gatt-based profile one app_id and one gatts_if, this array will store the gatts_if returned by ESP_GATTS_REG_EVT */
 static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
-    [HEART_PROFILE_APP_IDX] = {
+    [PROFILE_APP_IDX] = {
         .gatts_cb = gatts_profile_event_handler,
         .gatts_if = ESP_GATT_IF_NONE,       /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
-        .app_id = URU_APP_ID,
+        .app_id = APP_ID,
         .conn_id = 0,
         .service_handle = 0,
         .service_id = {},
@@ -151,6 +150,7 @@ static std::map<uint16_t, uint16_t> handle2uuid_map;
 static esp_gatts_attr_db_t gatt_db[GATT_MAX_PARAMS] = {};
 static size_t gatt_db_idx = 1; // O is taken for service id
 static bool debug = false;
+static char gatt_name[32] = "Not defined";
 
 static const char* esp_key_type_to_str(esp_ble_key_type_t key_type)
 {
@@ -320,7 +320,7 @@ static const char* type_to_string(gatt_param_type_t type)
         return "FLOAT";
     case GATT_PARAM_TYPE_INT:
         return "INT";
-        case GATT_PARAM_TYPE_UINT32:
+    case GATT_PARAM_TYPE_UINT32:
         return "UINT32";
     case GATT_PARAM_TYPE_STRING:
         return "STRING";
@@ -397,8 +397,9 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         }
         break;
     case ESP_GAP_BLE_PASSKEY_REQ_EVT:                           /* passkey request event */
-        /* Call the following function to input the passkey which is displayed on the remote device */
-        //esp_ble_passkey_reply(gl_profile_tab[HEART_PROFILE_APP_IDX].remote_bda, true, 0x00);
+        ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_PASSKEY_REQ_EVT");
+    /* Call the following function to input the passkey which is displayed on the remote device */
+        //esp_ble_passkey_reply(gl_profile_tab[PROFILE_APP_IDX].remote_bda, true, 0x00);
         break;
     case ESP_GAP_BLE_OOB_REQ_EVT: {
         ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_OOB_REQ_EVT");
@@ -419,7 +420,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_NC_REQ_EVT, the passkey Notify number:%" PRIu32, param->ble_security.key_notif.passkey);
         break;
     case ESP_GAP_BLE_SEC_REQ_EVT:
-        /* send the positive(true) security response to the peer device to accept the security request.
+        ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_SEC_REQ_EVT");
+    /* send the positive(true) security response to the peer device to accept the security request.
         If not accept the security request, should send the security response with negative(false) accept value*/
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
         break;
@@ -482,21 +484,20 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
 {
     switch (event) {
     case ESP_GATTS_REG_EVT:
-        ESP_LOGI(GATTS_TAG, "ESP_GATTS_REG_EVT");
         //generate a resolvable random address
         esp_ble_gap_config_local_privacy(true);
-        // for (size_t i = 0; i < gatt_db_idx; i++) {
-        //     if (gatt_db[i].att_desc.uuid_p == NULL) {
-        //         ESP_LOGE(GATTS_TAG, "gatt_db[%d] has NULL UUID pointer!", i);
-        //     } else {
-        //         uint16_t uuid = *((uint16_t*)gatt_db[i].att_desc.uuid_p);
-        //         ESP_LOGI(GATTS_TAG, "gatt_db[%d] UUID: 0x%04X", i, uuid);
-        //     }
-        // }
+        for (size_t i = 0; i < gatt_db_idx; i++) {
+            if (gatt_db[i].att_desc.uuid_p == NULL) {
+                ESP_LOGE(GATTS_TAG, "gatt_db[%d] has NULL UUID pointer!", i);
+            }
+            else {
+                uint16_t uuid = *((uint16_t*)gatt_db[i].att_desc.uuid_p);
+                ESP_LOGI(GATTS_TAG, "gatt_db[%d] UUID: 0x%04X", i, uuid);
+            }
+        }
         esp_ble_gatts_create_attr_tab(gatt_db, gatts_if, gatt_db_idx, 0);
         break;
     case ESP_GATTS_READ_EVT:
-        ESP_LOGI(GATTS_TAG, "ESP_GATTS_READ_EVT");
         break;
     case ESP_GATTS_WRITE_EVT:
     {
@@ -586,7 +587,6 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
     case ESP_GATTS_STOP_EVT:
         break;
     case ESP_GATTS_CONNECT_EVT:
-        ESP_LOGI(GATTS_TAG, "ESP_GATTS_CONNECT_EVT");
         /* start security connect with peer device when receive the connect event sent by the master */
         esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
         break;
@@ -606,31 +606,29 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
     case ESP_GATTS_CONGEST_EVT:
         break;
     case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
-        ESP_LOGI(GATTS_TAG, "The number handle = %x", param->add_attr_tab.num_handle);
         if (param->create.status == ESP_GATT_OK) {
             if (param->add_attr_tab.num_handle == gatt_db_idx) {
                 if (debug) ESP_LOGI(GATTS_TAG, "Create attribute table, handles = %d, Service uuid type %04X, Status %X", param->add_attr_tab.num_handle, param->add_attr_tab.svc_uuid.uuid.uuid16, param->add_attr_tab.status);
                 for (int i = 0; i < param->add_attr_tab.num_handle; i++) {
                     uint16_t uuid = *((uint16_t*)gatt_db[i].att_desc.uuid_p);
-                
+
                     handle2uuid_map[param->add_attr_tab.handles[i]] = uuid;
-                    
+
                     if (uuid == ESP_GATT_UUID_PRI_SERVICE)
                     {
                         esp_ble_gatts_start_service(param->add_attr_tab.handles[i]);
                         continue;
                     }
-                    else if (uuid == ESP_GATT_UUID_CHAR_DECLARE ||
-                        uuid == ESP_GATT_UUID_CHAR_CLIENT_CONFIG) {
+                    else if (uuid == ESP_GATT_UUID_CHAR_DECLARE || uuid == ESP_GATT_UUID_CHAR_CLIENT_CONFIG) {
                         continue;
                     }
-                
+
                     auto it = gatt_map.find(uuid);
                     if (it == gatt_map.end()) {
                         ESP_LOGE(GATTS_TAG, "UUID %04X not found in gatt_map", uuid);
                         continue;
                     }
-                
+
                     gatt_param_t* gp = &it->second;
                     gp->handle = param->add_attr_tab.handles[i];
 
@@ -665,7 +663,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     /* If event is register event, store the gatts_if for each profile */
     if (event == ESP_GATTS_REG_EVT) {
         if (param->reg.status == ESP_GATT_OK) {
-            gl_profile_tab[HEART_PROFILE_APP_IDX].gatts_if = gatts_if;
+            gl_profile_tab[PROFILE_APP_IDX].gatts_if = gatts_if;
         }
         else {
             ESP_LOGI(GATTS_TAG, "Reg app failed, app_id %04x, status %d",
@@ -692,10 +690,6 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     gatt_param_type_t type, esp_gatt_perm_t perm,
     esp_gatt_char_prop_t prop, const void* initial_value_ptr, size_t size)
 {
-    if (debug)
-        ESP_LOGI(GATTS_TAG, "Registering characteristic: \"%s\". UUID: %s, Perm: %X, Prop: %X, Size: %d, idx: %d",
-            name, uuid_str, perm, prop, size, gatt_db_idx);
-
     if (!name || !uuid_str || !initial_value_ptr || size == 0)
     {
         ESP_LOGE(GATTS_TAG, "Invalid parameters for registering characteristic: %s", name);
@@ -785,6 +779,10 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     gatt_db_idx++;
 
     // ---- Characteristic Value ----
+    if (debug)
+        ESP_LOGI(GATTS_TAG, "Registering characteristic: \"%s\". UUID: %s, Perm: %X, Prop: %X, Size: %d, gatt_db_idx: %d",
+            name, uuid_str, perm, prop, size, gatt_db_idx);
+
     gp->valueAttr = &gatt_db[gatt_db_idx];
     *gp->valueAttr = {
         .attr_control = {ESP_GATT_AUTO_RSP},
@@ -956,6 +954,11 @@ void gattserver_init(const char* name, const char* service_uuid)
 
     static esp_bt_uuid_t uuid = convert_uuid(service_uuid);
 
+    strncpy(gatt_name, name, sizeof(gatt_name) - 1);
+    gatt_name[sizeof(gatt_name) - 1] = '\0';
+
+    esp_ble_gap_set_device_name(gatt_name);
+
     // Setup general discoverable mode
     int i = 0;
     ext_adv_raw_data[i++] = 0x02;
@@ -963,11 +966,11 @@ void gattserver_init(const char* name, const char* service_uuid)
     ext_adv_raw_data[i++] = 0x06;
 
     // Setup service name
-    size_t name_len = strlen(name);
+    size_t name_len = strlen(gatt_name);
     ext_adv_raw_data[i++] = name_len + 1;
     ext_adv_raw_data[i++] = 0x09;
     for (size_t j = 0; j < name_len; j++)
-        ext_adv_raw_data[i++] = name[j];
+        ext_adv_raw_data[i++] = gatt_name[j];
 
     // 16 bit service UUID
     ext_adv_raw_data[i++] = 0x03;
@@ -1027,7 +1030,7 @@ void gattserver_init(const char* name, const char* service_uuid)
         ESP_LOGE(GATTS_TAG, "gap register error, error code = %x", ret);
         return;
     }
-    ret = esp_ble_gatts_app_register(URU_APP_ID);
+    ret = esp_ble_gatts_app_register(APP_ID);
     if (ret) {
         ESP_LOGE(GATTS_TAG, "gatts app register error, error code = %x", ret);
         return;
@@ -1062,6 +1065,6 @@ void gattserver_init(const char* name, const char* service_uuid)
      * vTaskDelay(30000 / portTICK_PERIOD_MS);
      * remove_all_bonded_devices();
      */
-    ESP_LOGI(GATTS_TAG, "Gattserver initialized, characters: %d", gatt_db_idx);
+    ESP_LOGI(GATTS_TAG, "Gattserver initialized, gatt_db_idx: %d", gatt_db_idx);
 }
 #endif
