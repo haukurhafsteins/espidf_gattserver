@@ -30,7 +30,7 @@
 
 #define PROFILE_NUM                               1
 #define HEART_PROFILE_APP_IDX                     0
-#define ESP_HEART_RATE_APP_ID                     0x55
+#define URU_APP_ID                                0x55
 #define HEART_RATE_SVC_INST_ID                    0
 #define EXT_ADV_HANDLE                            0
 #define NUM_EXT_ADV_SET                           1
@@ -89,8 +89,17 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
     [HEART_PROFILE_APP_IDX] = {
         .gatts_cb = gatts_profile_event_handler,
         .gatts_if = ESP_GATT_IF_NONE,       /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
+        .app_id = URU_APP_ID,
+        .conn_id = 0,
+        .service_handle = 0,
+        .service_id = {},
+        .char_handle = 0,
+        .char_uuid = {},
+        .perm = {},
+        .property = 0,
+        .descr_handle = 0,
+        .descr_uuid = {},
     },
-
 };
 
 #define CHAR_DECLARATION_SIZE       (sizeof(uint8_t))
@@ -125,6 +134,8 @@ typedef struct gatt_param_t
     union {
         float f;
         int i;
+        uint32_t u32;
+        uint16_t u16;
         char* s;
         void* v;
         uint8_t u8;
@@ -141,9 +152,9 @@ static esp_gatts_attr_db_t gatt_db[GATT_MAX_PARAMS] = {};
 static size_t gatt_db_idx = 1; // O is taken for service id
 static bool debug = false;
 
-static char* esp_key_type_to_str(esp_ble_key_type_t key_type)
+static const char* esp_key_type_to_str(esp_ble_key_type_t key_type)
 {
-    char* key_str = NULL;
+    const char* key_str = NULL;
     switch (key_type) {
     case ESP_LE_KEY_NONE:
         key_str = "ESP_LE_KEY_NONE";
@@ -181,9 +192,9 @@ static char* esp_key_type_to_str(esp_ble_key_type_t key_type)
     return key_str;
 }
 
-static char* esp_auth_req_to_str(esp_ble_auth_req_t auth_req)
+static const char* esp_auth_req_to_str(esp_ble_auth_req_t auth_req)
 {
-    char* auth_str = NULL;
+    const char* auth_str = NULL;
     switch (auth_req) {
     case ESP_LE_AUTH_NO_BOND:
         auth_str = "ESP_LE_AUTH_NO_BOND";
@@ -219,7 +230,7 @@ static char* esp_auth_req_to_str(esp_ble_auth_req_t auth_req)
 
 static const char* property_to_string(uint8_t property)
 {
-    char* prop_str = NULL;
+    const char* prop_str = NULL;
     switch (property) {
     case ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY:
         prop_str = "READ|WRITE|NOTIFY";
@@ -266,7 +277,8 @@ static const char* permission_to_string(esp_gatts_attr_db_t* attr)
 {
     if (attr == NULL)
         return "NULL ATTRIBUTE";
-    char* perm_str = NULL;
+
+    const char* perm_str = NULL;
     switch (attr->att_desc.perm) {
     case ESP_GATT_PERM_READ:
         perm_str = "PERM_READ";
@@ -308,6 +320,8 @@ static const char* type_to_string(gatt_param_type_t type)
         return "FLOAT";
     case GATT_PARAM_TYPE_INT:
         return "INT";
+        case GATT_PARAM_TYPE_UINT32:
+        return "UINT32";
     case GATT_PARAM_TYPE_STRING:
         return "STRING";
     case GATT_PARAM_TYPE_GENERIC:
@@ -333,7 +347,7 @@ static void show_bonded_devices(void)
     esp_ble_get_bond_device_list(&dev_num, dev_list);
     ESP_LOGI(GATTS_TAG, "Bonded devices number : %d", dev_num);
     for (int i = 0; i < dev_num; i++) {
-        esp_log_buffer_hex(GATTS_TAG, (void*)dev_list[i].bd_addr, sizeof(esp_bd_addr_t));
+        ESP_LOG_BUFFER_HEX(GATTS_TAG, (void*)dev_list[i].bd_addr, sizeof(esp_bd_addr_t));
     }
 
     free(dev_list);
@@ -438,7 +452,7 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         ESP_LOGD(GATTS_TAG, "ESP_GAP_BLE_REMOVE_BOND_DEV_COMPLETE_EVT status = %d", param->remove_bond_dev_cmpl.status);
         ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_REMOVE_BOND_DEV");
         ESP_LOGI(GATTS_TAG, "-----ESP_GAP_BLE_REMOVE_BOND_DEV----");
-        esp_log_buffer_hex(GATTS_TAG, (void*)param->remove_bond_dev_cmpl.bd_addr, sizeof(esp_bd_addr_t));
+        ESP_LOG_BUFFER_HEX(GATTS_TAG, (void*)param->remove_bond_dev_cmpl.bd_addr, sizeof(esp_bd_addr_t));
         ESP_LOGI(GATTS_TAG, "------------------------------------");
         break;
     }
@@ -471,14 +485,14 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
         ESP_LOGI(GATTS_TAG, "ESP_GATTS_REG_EVT");
         //generate a resolvable random address
         esp_ble_gap_config_local_privacy(true);
-        for (size_t i = 0; i < gatt_db_idx; i++) {
-            if (gatt_db[i].att_desc.uuid_p == NULL) {
-                ESP_LOGE(GATTS_TAG, "gatt_db[%d] has NULL UUID pointer!", i);
-            } else {
-                uint16_t uuid = *((uint16_t*)gatt_db[i].att_desc.uuid_p);
-                ESP_LOGI(GATTS_TAG, "gatt_db[%d] UUID: 0x%04X", i, uuid);
-            }
-        }
+        // for (size_t i = 0; i < gatt_db_idx; i++) {
+        //     if (gatt_db[i].att_desc.uuid_p == NULL) {
+        //         ESP_LOGE(GATTS_TAG, "gatt_db[%d] has NULL UUID pointer!", i);
+        //     } else {
+        //         uint16_t uuid = *((uint16_t*)gatt_db[i].att_desc.uuid_p);
+        //         ESP_LOGI(GATTS_TAG, "gatt_db[%d] UUID: 0x%04X", i, uuid);
+        //     }
+        // }
         esp_ble_gatts_create_attr_tab(gatt_db, gatts_if, gatt_db_idx, 0);
         break;
     case ESP_GATTS_READ_EVT:
@@ -707,7 +721,7 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
         ESP_LOGE(GATTS_TAG, "UUID %04X already registered", uuid);
         return NULL;
     }
-    gatt_map[uuid] = { 0 };
+    gatt_map[uuid] = {};
     gatt_param_t* gp = &gatt_map[uuid];
 
     uint16_t value_max_size;
@@ -716,6 +730,10 @@ gatt_param_handle_t gattserver_register_generic(const char* name, const char* uu
     case GATT_PARAM_TYPE_INT:
         value_max_size = sizeof(int);
         gp->value.i = *(int*)initial_value_ptr;
+        break;
+    case GATT_PARAM_TYPE_UINT32:
+        value_max_size = sizeof(uint32_t);
+        gp->value.u32 = *(uint32_t*)initial_value_ptr;
         break;
     case GATT_PARAM_TYPE_FLOAT:
         value_max_size = sizeof(float);
@@ -811,6 +829,11 @@ gatt_param_handle_t gattserver_register_int(const char* name, const char* uuid_s
     return gattserver_register_generic(name, uuid_str, GATT_PARAM_TYPE_INT, perm, prop, &init_value, sizeof(int));
 }
 
+gatt_param_handle_t gattserver_register_uint32(const char* name, const char* uuid_str,
+    esp_gatt_perm_t perm, esp_gatt_char_prop_t prop, uint32_t init_value) {
+    return gattserver_register_generic(name, uuid_str, GATT_PARAM_TYPE_UINT32, perm, prop, &init_value, sizeof(uint32_t));
+}
+
 gatt_param_handle_t gattserver_register_string(const char* name, const char* uuid_str,
     esp_gatt_perm_t perm, esp_gatt_char_prop_t prop, const char* init_value) {
     return gattserver_register_generic(name, uuid_str, GATT_PARAM_TYPE_STRING, perm, prop, init_value, strlen(init_value));
@@ -858,6 +881,11 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, s
 esp_err_t gattserver_notify_int(gatt_param_handle_t handle, int new_value)
 {
     return gattserver_notify(handle, &new_value, sizeof(int));
+}
+
+esp_err_t gattserver_notify_uint32(gatt_param_handle_t handle, uint32_t new_value)
+{
+    return gattserver_notify(handle, &new_value, sizeof(uint32_t));
 }
 
 esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float new_value)
@@ -999,7 +1027,7 @@ void gattserver_init(const char* name, const char* service_uuid)
         ESP_LOGE(GATTS_TAG, "gap register error, error code = %x", ret);
         return;
     }
-    ret = esp_ble_gatts_app_register(ESP_HEART_RATE_APP_ID);
+    ret = esp_ble_gatts_app_register(URU_APP_ID);
     if (ret) {
         ESP_LOGE(GATTS_TAG, "gatts app register error, error code = %x", ret);
         return;
