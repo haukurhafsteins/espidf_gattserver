@@ -151,6 +151,9 @@ static esp_gatts_attr_db_t gatt_db[GATT_MAX_PARAMS] = {};
 static size_t gatt_db_idx = 1; // O is taken for service id
 static bool debug = false;
 static char gatt_name[32] = "Not defined";
+static char gatt_short_name[32] = "Not defined";
+static uint8_t scan_rsp_data[64] = {};
+static size_t scan_rsp_data_len = 0;
 
 static const char* esp_key_type_to_str(esp_ble_key_type_t key_type)
 {
@@ -382,6 +385,7 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     case ESP_GAP_BLE_EXT_ADV_SET_PARAMS_COMPLETE_EVT:
         ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_EXT_ADV_SET_PARAMS_COMPLETE_EVT status %d", param->ext_adv_set_params.status);
         esp_ble_gap_config_ext_adv_data_raw(EXT_ADV_HANDLE, ext_adv_raw_data_len, &ext_adv_raw_data[0]);
+        esp_ble_gap_config_ext_scan_rsp_data_raw(EXT_ADV_HANDLE, scan_rsp_data_len, scan_rsp_data);
         break;
     case ESP_GAP_BLE_EXT_ADV_DATA_SET_COMPLETE_EVT:
         ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_EXT_ADV_DATA_SET_COMPLETE_EVT status %d", param->ext_adv_data_set.status);
@@ -398,8 +402,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         break;
     case ESP_GAP_BLE_PASSKEY_REQ_EVT:                           /* passkey request event */
         ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_PASSKEY_REQ_EVT");
-    /* Call the following function to input the passkey which is displayed on the remote device */
-        //esp_ble_passkey_reply(gl_profile_tab[PROFILE_APP_IDX].remote_bda, true, 0x00);
+        /* Call the following function to input the passkey which is displayed on the remote device */
+            //esp_ble_passkey_reply(gl_profile_tab[PROFILE_APP_IDX].remote_bda, true, 0x00);
         break;
     case ESP_GAP_BLE_OOB_REQ_EVT: {
         ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_OOB_REQ_EVT");
@@ -421,8 +425,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         break;
     case ESP_GAP_BLE_SEC_REQ_EVT:
         ESP_LOGI(GATTS_TAG, "ESP_GAP_BLE_SEC_REQ_EVT");
-    /* send the positive(true) security response to the peer device to accept the security request.
-        If not accept the security request, should send the security response with negative(false) accept value*/
+        /* send the positive(true) security response to the peer device to accept the security request.
+            If not accept the security request, should send the security response with negative(false) accept value*/
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
         break;
     case ESP_GAP_BLE_PASSKEY_NOTIF_EVT:  ///the app will receive this evt when the IO  has Output capability and the peer device IO has Input capability.
@@ -684,6 +688,67 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             }
         }
     } while (0);
+}
+
+static void setup_advertising(esp_bt_uuid_t uuid)
+{
+    // Setup advertising data
+    // This is the first packet sent by a BLE peripheral when it's advertising. 
+    // It's broadcast periodically and contains limited information about the device.
+    // 31 bytes max (legacy mode).
+
+    int i = 0;
+
+    ext_adv_raw_data[i++] = 0x02;
+    ext_adv_raw_data[i++] = ESP_BLE_AD_TYPE_FLAG;
+    ext_adv_raw_data[i++] = 0x06;
+
+    // Setup service name
+    size_t short_name_len = strlen(gatt_short_name);
+    ext_adv_raw_data[i++] = short_name_len + 1;
+    ext_adv_raw_data[i++] = ESP_BLE_AD_TYPE_NAME_SHORT;
+    for (size_t j = 0; j < short_name_len; j++)
+        ext_adv_raw_data[i++] = gatt_short_name[j];
+
+    // 16 bit service UUID
+    ext_adv_raw_data[i++] = 0x03;
+    ext_adv_raw_data[i++] = ESP_BLE_AD_TYPE_16SRV_CMPL;
+    ext_adv_raw_data[i++] = uuid.uuid.uuid16 & 0xFF;
+    ext_adv_raw_data[i++] = uuid.uuid.uuid16 >> 8;
+
+    ext_adv_raw_data_len = i;
+}
+
+static void setup_scan_response(esp_bt_uuid_t uuid)
+{
+    // Setup scan response data
+    // This is a follow-up packet, only sent if the central device actively 
+    // requests it by sending a SCAN_REQ.
+    // 31 bytes max (legacy mode).
+
+    int i = 0;
+
+    // Add full local name
+    size_t name_len = strlen(gatt_name);
+    scan_rsp_data[i++] = name_len + 1;
+    scan_rsp_data[i++] = ESP_BLE_AD_TYPE_NAME_CMPL; 
+    for (size_t j = 0; j < name_len; j++)
+        scan_rsp_data[i++] = gatt_name[j];
+
+    // Manufacturer specific type
+    scan_rsp_data[i++] = 5;
+    scan_rsp_data[i++] = ESP_BLE_AD_MANUFACTURER_SPECIFIC_TYPE;
+    scan_rsp_data[i++] = 0x34; // Company ID LSB (example)
+    scan_rsp_data[i++] = 0x12; // Company ID MSB
+    scan_rsp_data[i++] = 0x01; // Custom data
+    scan_rsp_data[i++] = 0x02;
+
+    // Transmit power
+    scan_rsp_data[i++] = 2;
+    scan_rsp_data[i++] = ESP_BLE_AD_TYPE_TX_PWR;
+    scan_rsp_data[i++] = 0x00; // 0 dBm
+
+    scan_rsp_data_len = i;
 }
 
 gatt_param_handle_t gattserver_register_generic(const char* name, const char* uuid_str,
@@ -948,7 +1013,7 @@ void gattserver_set_debug(bool d)
     debug = d;
 }
 
-void gattserver_init(const char* name, const char* service_uuid)
+void gattserver_init(const char* name, const char* short_name, const char* service_uuid)
 {
     esp_err_t ret;
 
@@ -956,28 +1021,13 @@ void gattserver_init(const char* name, const char* service_uuid)
 
     strncpy(gatt_name, name, sizeof(gatt_name) - 1);
     gatt_name[sizeof(gatt_name) - 1] = '\0';
+    strncpy(gatt_short_name, short_name, sizeof(gatt_short_name) - 1);
+    gatt_short_name[sizeof(gatt_short_name) - 1] = '\0';
 
     esp_ble_gap_set_device_name(gatt_name);
 
-    // Setup general discoverable mode
-    int i = 0;
-    ext_adv_raw_data[i++] = 0x02;
-    ext_adv_raw_data[i++] = 0x01;
-    ext_adv_raw_data[i++] = 0x06;
-
-    // Setup service name
-    size_t name_len = strlen(gatt_name);
-    ext_adv_raw_data[i++] = name_len + 1;
-    ext_adv_raw_data[i++] = 0x09;
-    for (size_t j = 0; j < name_len; j++)
-        ext_adv_raw_data[i++] = gatt_name[j];
-
-    // 16 bit service UUID
-    ext_adv_raw_data[i++] = 0x03;
-    ext_adv_raw_data[i++] = 0x03;
-    ext_adv_raw_data[i++] = uuid.uuid.uuid16 & 0xFF;
-    ext_adv_raw_data[i++] = uuid.uuid.uuid16 >> 8;
-    ext_adv_raw_data_len = i;
+    setup_advertising(uuid);
+    setup_scan_response(uuid);
 
     gatt_db[0] = {
         .attr_control = {ESP_GATT_AUTO_RSP},

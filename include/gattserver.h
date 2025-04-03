@@ -32,7 +32,7 @@ extern "C"
 
     /// @brief Initialize the GATT server
     /// @param service_uuid The UUID of the service
-    void gattserver_init(const char* name, const char* service_uuid);
+    void gattserver_init(const char* name, const char* short_name, const char* service_uuid);
 
     /// @brief Register a new parameter to be exposed via GATT
     /// @param name Parameter name
