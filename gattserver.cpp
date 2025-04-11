@@ -920,8 +920,8 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, s
 
     if (handle->cccd_enabled != 0x0001 && handle->cccd_enabled != 0x0002)
     {
-        ESP_LOGW(GATTS_TAG, "Client has not enabled notifications/indications for %s (UUID: 0x%X)",
-            handle->name, handle->uuid.uuid.uuid16);
+        // ESP_LOGW(GATTS_TAG, "Client has not enabled notifications/indications for %s (UUID: 0x%X)",
+        //     handle->name, handle->uuid.uuid.uuid16);
         return ESP_FAIL;
     }
 
