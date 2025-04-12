@@ -1,6 +1,12 @@
 # GATT Server for the espidf Framework
 
 ## Overview
+What I want to accomplish is to have a single gattserver component that I can use in different applications and abstracts the most common code used when dealing with gatt:
+- Have the possibility to register/create one or more services.
+- Have the possibility to register a character to a given service.
+- If a registered character is writable, have the possibility to register a callback that will be called when a client writes to the character.
+- Have the possibility to trigger a notification for a character
+
 This GATT server provides a **generic** and **modular** BLE implementation for ESP32.
 Users can define their **own UUIDs** and dynamically register **float, int, and string characteristics**. The system also supports **notifications** and **write callbacks**.
 
