@@ -1,102 +1,150 @@
 #include "host/ble_gatt.h"
 #include "host/ble_hs.h"
+#include "host/util/util.h"
 #include "esp_log.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
+#include "services/ans/ble_svc_ans.h"
 #include <string.h>
+
+#include "gattserver_priv.h"
+#include "gattserver.h"
 
 #define TAG "GATTServer"
 #define GATT_MAX_PARAMS 60
-#define GATT_MAX_SERVICES 8
-
-typedef enum {
-    GATT_PARAM_TYPE_UINT32,
-    GATT_PARAM_TYPE_FLOAT,
-    GATT_PARAM_TYPE_STRING,
-    GATT_PARAM_TYPE_GENERIC
-} gatt_param_type_t;
-
-typedef struct gatt_param_t gatt_param_t;
-typedef gatt_param_t* gatt_param_handle_t;
-
-typedef struct gatt_service_t {
-    ble_uuid_any_t uuid;
-    struct ble_gatt_svc_def def;
-    struct ble_gatt_chr_def* characteristics;
-    int char_count;
-} gatt_service_t;
 
 typedef gatt_service_t* gatt_service_handle_t;
 
 typedef void (*gatt_write_cb_t)(gatt_param_handle_t handle, void* value, size_t len);
 
-typedef struct gatt_param_t {
-    const char* name;
-    ble_uuid_any_t uuid;
-    uint8_t flags;
-    gatt_param_type_t type;
-    uint8_t value_buf[64];
-    uint16_t value_len;
-    uint16_t handle;
-    gatt_write_cb_t write_cb;
-    gatt_service_handle_t service;
-} gatt_param_t;
+static uint8_t own_addr_type;
 
-static gatt_param_t gatt_params[GATT_MAX_PARAMS];
-static int gatt_param_count = 0;
+void bleprph_host_task(void *param)
+{
+    ESP_LOGI(TAG, "BLE Host Task Started");
+    /* This function will return only when nimble_port_stop() is executed */
+    nimble_port_run();
 
-static gatt_service_t gatt_services[GATT_MAX_SERVICES];
-static int gatt_service_count = 0;
-
-static int gatt_access_cb(uint16_t conn_handle, uint16_t attr_handle,
-                          struct ble_gatt_access_ctxt* ctxt, void* arg) {
-    gatt_param_t* param = (gatt_param_t*)arg;
-    if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-        return os_mbuf_append(ctxt->om, param->value_buf, param->value_len);
-    } else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-        int len = OS_MBUF_PKTLEN(ctxt->om);
-        if (len <= sizeof(param->value_buf)) {
-            os_mbuf_copydata(ctxt->om, 0, len, param->value_buf);
-            param->value_len = len;
-            if (param->write_cb) {
-                param->write_cb(param, param->value_buf, param->value_len);
-            }
-        }
-        return 0;
-    }
-    return BLE_ATT_ERR_UNLIKELY;
+    nimble_port_freertos_deinit();
 }
 
-gatt_service_handle_t gattserver_register_service(const ble_uuid_any_t* uuid) {
-    if (gatt_service_count >= GATT_MAX_SERVICES) return NULL;
-    gatt_service_t* svc = &gatt_services[gatt_service_count++];
-    svc->uuid = *uuid;
-    svc->char_count = 0;
-    svc->characteristics = NULL;
-    return svc;
+static void
+bleprph_advertise(void)
+{
+    struct ble_gap_adv_params adv_params;
+    struct ble_hs_adv_fields fields;
+    const char *name;
+    int rc;
+
+    /**
+     *  Set the advertisement data included in our advertisements:
+     *     o Flags (indicates advertisement type and other general info).
+     *     o Advertising tx power.
+     *     o Device name.
+     *     o 16-bit service UUIDs (alert notifications).
+     */
+
+    memset(&fields, 0, sizeof fields);
+
+    /* Advertise two flags:
+     *     o Discoverability in forthcoming advertisement (general)
+     *     o BLE-only (BR/EDR unsupported).
+     */
+    fields.flags = BLE_HS_ADV_F_DISC_GEN |
+                   BLE_HS_ADV_F_BREDR_UNSUP;
+
+    /* Indicate that the TX power level field should be included; have the
+     * stack fill this value automatically.  This is done by assigning the
+     * special value BLE_HS_ADV_TX_PWR_LVL_AUTO.
+     */
+    fields.tx_pwr_lvl_is_present = 1;
+    fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
+
+    name = ble_svc_gap_device_name();
+    fields.name = (uint8_t *)name;
+    fields.name_len = strlen(name);
+    fields.name_is_complete = 1;
+
+    // fields.uuids16 = (ble_uuid16_t[]) {
+    //     BLE_UUID16_INIT(GATT_SVR_SVC_ALERT_UUID)
+    // };
+    // fields.num_uuids16 = 1;
+    // fields.uuids16_is_complete = 1;
+
+    rc = ble_gap_adv_set_fields(&fields);
+    if (rc != 0) {
+        MODLOG_DFLT(ERROR, "error setting advertisement data; rc=%d\n", rc);
+        return;
+    }
+
+    /* Begin advertising. */
+    memset(&adv_params, 0, sizeof adv_params);
+    adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
+    adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+    rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
+                           &adv_params, bleprph_gap_event_cb, NULL);
+    if (rc != 0) {
+        MODLOG_DFLT(ERROR, "error enabling advertisement; rc=%d\n", rc);
+        return;
+    }
+}
+
+static void bleprph_on_reset(int reason)
+{
+    MODLOG_DFLT(ERROR, "Resetting state; reason=%d\n", reason);
+}
+
+static void bleprph_on_sync(void)
+{
+    int rc;
+
+#if CONFIG_EXAMPLE_RANDOM_ADDR
+    /* Generate a non-resolvable private address. */
+    ble_app_set_addr();
+#endif
+
+    /* Make sure we have proper identity address set (public preferred) */
+#if CONFIG_EXAMPLE_RANDOM_ADDR
+    rc = ble_hs_util_ensure_addr(1);
+#else
+    rc = ble_hs_util_ensure_addr(0);
+#endif
+    assert(rc == 0);
+
+    /* Figure out address to use while advertising (no privacy for now) */
+    rc = ble_hs_id_infer_auto(0, &own_addr_type);
+    if (rc != 0) {
+        MODLOG_DFLT(ERROR, "error determining address type; rc=%d\n", rc);
+        return;
+    }
+
+    /* Printing ADDR */
+    uint8_t addr_val[6] = {};
+    rc = ble_hs_id_copy_addr(own_addr_type, addr_val, NULL);
+
+    MODLOG_DFLT(INFO, "Device Address: ");
+    //print_addr(addr_val);
+    MODLOG_DFLT(INFO, "\n");
+    /* Begin advertising. */
+#if CONFIG_EXAMPLE_EXTENDED_ADV
+    ext_bleprph_advertise();
+#else
+    bleprph_advertise();
+#endif
+}
+
+gatt_service_handle_t gattserver_register_service(const ble_uuid_any_t* uuid) 
+{
+    return gatt_register_service(uuid);
 }
 
 gatt_param_handle_t gattserver_register_generic_to_service(
     gatt_service_handle_t service, const char* name, const ble_uuid_any_t* uuid,
-    gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size) {
-
-    if (!service || gatt_param_count >= GATT_MAX_PARAMS || value_size > sizeof(gatt_params[0].value_buf))
-        return NULL;
-
-    gatt_param_t* p = &gatt_params[gatt_param_count++];
-    p->name = name;
-    p->uuid = *uuid;
-    p->flags = flags;
-    p->type = type;
-    memcpy(p->value_buf, init_value, value_size);
-    p->value_len = value_size;
-    p->write_cb = NULL;
-    p->service = service;
-
-    service->char_count++;
-    return p;
+    gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size) 
+{
+    return gatt_register_generic_to_service(service, name, uuid, type, flags, init_value, value_size);
 }
 
 gatt_param_handle_t gattserver_register_float_to_service(
@@ -117,75 +165,59 @@ gatt_param_handle_t gattserver_register_string_to_service(
     return gattserver_register_generic_to_service(service, name, uuid, GATT_PARAM_TYPE_STRING, flags, init_value, strlen(init_value));
 }
 
-esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb) {
-    if (!handle) return ESP_ERR_INVALID_ARG;
-    handle->write_cb = cb;
-    return ESP_OK;
+esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb) 
+{
+    return gatt_register_write_cb(handle, cb);
 }
 
-esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len) {
-    if (!handle || len > sizeof(handle->value_buf)) return ESP_ERR_INVALID_ARG;
-    memcpy(handle->value_buf, new_value, len);
-    handle->value_len = len;
-    return ble_gatts_notify(0, handle->handle);
+esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len) 
+{
+    return gatt_notify(handle, new_value, len);
 }
 
-static void ble_app_advertise(void) {
-    struct ble_gap_adv_params adv_params = {
-        .conn_mode = BLE_GAP_CONN_MODE_UND,
-        .disc_mode = BLE_GAP_DISC_MODE_GEN,
-    };
+void gattserver_start(const char* name) {
+    /* Initialize the NimBLE host configuration. */
+    ble_hs_cfg.reset_cb = bleprph_on_reset;
+    ble_hs_cfg.sync_cb = bleprph_on_sync;
+    ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
+    ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
-    struct ble_hs_adv_fields fields = {0};
-    fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
-    fields.name = (uint8_t*)ble_svc_gap_device_name();
-    fields.name_len = strlen(ble_svc_gap_device_name());
-    fields.name_is_complete = 1;
+    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
+#ifdef CONFIG_EXAMPLE_BONDING
+    ble_hs_cfg.sm_bonding = 1;
+    /* Enable the appropriate bit masks to make sure the keys
+     * that are needed are exchanged
+     */
+    ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
+    ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
+#endif
+#ifdef CONFIG_EXAMPLE_MITM
+    ble_hs_cfg.sm_mitm = 1;
+#endif
+#ifdef CONFIG_EXAMPLE_USE_SC
+    ble_hs_cfg.sm_sc = 1;
+#else
+    ble_hs_cfg.sm_sc = 0;
+#endif
+#ifdef CONFIG_EXAMPLE_RESOLVE_PEER_ADDR
+    /* Stores the IRK */
+    ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ID;
+    ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ID;
+#endif
 
-    ble_gap_adv_set_fields(&fields);
-    ble_gap_adv_start(0, NULL, BLE_HS_FOREVER, &adv_params, NULL, NULL);
-}
-
-void gattserver_start(void) {
-    static struct ble_gatt_svc_def services[GATT_MAX_SERVICES + 1];
-    static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
-
-    int svc_index = 0;
-    int chr_index = 0;
-
-    for (int s = 0; s < gatt_service_count; ++s) {
-        gatt_service_t* svc = &gatt_services[s];
-
-        svc->characteristics = &characteristics[chr_index];
-        int local_char_count = 0;
-
-        for (int i = 0; i < gatt_param_count; ++i) {
-            gatt_param_t* p = &gatt_params[i];
-            if (p->service == svc) {
-                characteristics[chr_index++] = (struct ble_gatt_chr_def){
-                    .uuid = &p->uuid.u,
-                    .access_cb = gatt_access_cb,
-                    .arg = p,
-                    .flags = p->flags
-                };
-                local_char_count++;
-            }
-        }
-
-        characteristics[chr_index++] = (struct ble_gatt_chr_def){0};
-
-        services[svc_index++] = (struct ble_gatt_svc_def){
-            .type = BLE_GATT_SVC_TYPE_PRIMARY,
-            .uuid = &svc->uuid.u,
-            .characteristics = svc->characteristics
-        };
+    esp_err_t ret = nimble_port_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to init nimble %d ", ret);
+        return;
     }
+    
+    gatt_svr_init();
 
-    services[svc_index] = (struct ble_gatt_svc_def){0};
+    int rc = ble_svc_gap_device_name_set(name);
+    assert(rc == 0);
 
-    ble_svc_gap_init();
-    ble_svc_gatt_init();
+    /* XXX Need to have template for store */
+    //ble_store_config_init();
 
-    ESP_ERROR_CHECK(ble_gatts_add_svcs(services));
-    ble_app_advertise();
+    nimble_port_freertos_init(bleprph_host_task);
 }

@@ -8,6 +8,8 @@
 #include "host/ble_gatt.h"
 
 #define GATT_MAX_PARAMS 60
+#define GATT_MAX_SERVICES 8
+
 
 #define GATT_UUID16(uuid) { .u16 = { .u = { .type = BLE_UUID_TYPE_16 }, .value = uuid } };
   
@@ -43,4 +45,4 @@ gatt_param_handle_t gattserver_register_string_to_service(
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len);
 
-void gattserver_start(void);
+void gattserver_start(const char* name);
