@@ -27,6 +27,7 @@
 // #include "bleprph.h"
 #include "services/ans/ble_svc_ans.h"
 #include "gattserver.h"
+#include "gattserver_priv.h"
 
 /*** Maximum number of characteristics with the notify flag ***/
 #define MAX_NOTIFY 5
@@ -51,9 +52,6 @@ static const ble_uuid128_t gatt_svr_dsc_uuid =
 static int gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
                            struct ble_gatt_access_ctxt *ctxt,
                            void *arg);
-
-static struct ble_gatt_svc_def gatt_svr_svcs[GATT_MAX_SERVICES + 1];
-static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
 
 typedef struct gatt_service_t {
     ble_uuid_any_t uuid;
@@ -81,6 +79,8 @@ static gatt_service_t gatt_services[GATT_MAX_SERVICES];
 static int gatt_service_count = 0;
 static gatt_param_t gatt_params[GATT_MAX_PARAMS];
 static int gatt_param_count = 0;
+static struct ble_gatt_svc_def gatt_svr_svcs[GATT_MAX_SERVICES + 1];
+static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
 
 //  static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
 //      {
@@ -303,16 +303,18 @@ static int gatt_access_cb(uint16_t conn_handle, uint16_t attr_handle,
     return BLE_ATT_ERR_UNLIKELY;
 }
 
-gatt_param_handle_t gatt_register_generic_to_service(
-    gatt_service_handle_t service, const char* name, const ble_uuid_any_t* uuid,
+gatt_param_handle_t gatt_register_characteristics_to_service(
+    gatt_service_handle_t service, const char* name, const ble_uuid_any_t uuid,
     gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size) {
 
     if (!service || gatt_param_count >= GATT_MAX_PARAMS || value_size > sizeof(gatt_params[0].value_buf))
+    {
         return NULL;
+    }
 
     gatt_param_t* p = &gatt_params[gatt_param_count++];
     p->name = name;
-    p->uuid = *uuid;
+    p->uuid = uuid;
     p->flags = flags;
     p->type = type;
     memcpy(p->value_buf, init_value, value_size);
@@ -320,16 +322,18 @@ gatt_param_handle_t gatt_register_generic_to_service(
     p->write_cb = NULL;
     p->service = service;
 
+    printf("Registering characteristic %16s with UUID %4X to service %4X, index %2d\n", name, uuid.u16.value, service->uuid.u16.value, gatt_param_count);
+
     service->char_count++;
     return p;
 }
 
-gatt_service_handle_t gatt_register_service(const ble_uuid_any_t *uuid)
+gatt_service_handle_t gatt_register_service(const ble_uuid_any_t uuid)
 {
     if (gatt_service_count >= GATT_MAX_SERVICES)
         return NULL;
     gatt_service_t *svc = &gatt_services[gatt_service_count++];
-    svc->uuid = *uuid;
+    svc->uuid = uuid;
     svc->char_count = 0;
     svc->characteristics = NULL;
     return svc;
@@ -340,7 +344,12 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
     if (!handle || len > sizeof(handle->value_buf)) return ESP_ERR_INVALID_ARG;
     memcpy(handle->value_buf, new_value, len);
     handle->value_len = len;
-    return ble_gatts_notify(0, handle->handle);
+    int rc = ble_gatts_notify(g_conn_handle, handle->handle);
+    if (rc != 0) {
+        printf("Error notifying characteristic %s: %d, handle %d\n", handle->name, rc, handle->handle);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
 }
 
 esp_err_t gatt_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb) {
@@ -371,7 +380,8 @@ int gatt_svr_init(void)
                     .uuid = &p->uuid.u,
                     .access_cb = gatt_access_cb,
                     .arg = p,
-                    .flags = p->flags};
+                    .flags = p->flags,
+                    .val_handle = &p->handle};
                 local_char_count++;
             }
         }
@@ -385,13 +395,24 @@ int gatt_svr_init(void)
     }
 
     gatt_svr_svcs[svc_index] = (struct ble_gatt_svc_def){};
-    int rc;
+
+    // Print the whole gatt_service_t with characteristics
+    for (int i = 0; i < gatt_service_count; ++i)
+    {
+        gatt_service_t *svc = &gatt_services[i];
+        printf("Service %2d: UUID %4X, Characteristics %d\n", i, svc->uuid.u16.value, svc->char_count);
+        for (int j = 0; j < svc->char_count; ++j)
+        {
+            gatt_param_t *p = &gatt_params[j];
+            printf("  Characteristic %d: %16s UUID %4X, Flags %02X\n", j, p->name, p->uuid.u16.value, p->flags);
+        }
+    }
 
     ble_svc_gap_init();
     ble_svc_gatt_init();
     //ble_svc_ans_init();
 
-    rc = ble_gatts_count_cfg(gatt_svr_svcs);
+    int rc = ble_gatts_count_cfg(gatt_svr_svcs);
     if (rc != 0)
     {
         return rc;
