@@ -64,7 +64,6 @@ typedef struct gatt_param_t gatt_param_t;
 typedef gatt_param_t* gatt_param_handle_t;
 
 typedef struct gatt_param_t {
-    const char* name;
     ble_uuid_any_t uuid;
     uint8_t flags;
     gatt_param_type_t type;
@@ -304,7 +303,7 @@ static int gatt_access_cb(uint16_t conn_handle, uint16_t attr_handle,
 }
 
 gatt_param_handle_t gatt_register_characteristics_to_service(
-    gatt_service_handle_t service, const char* name, const ble_uuid_any_t uuid,
+    gatt_service_handle_t service, const ble_uuid_any_t uuid,
     gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size) {
 
     if (!service || gatt_param_count >= GATT_MAX_PARAMS || value_size > sizeof(gatt_params[0].value_buf))
@@ -313,7 +312,6 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     }
 
     gatt_param_t* p = &gatt_params[gatt_param_count++];
-    p->name = name;
     p->uuid = uuid;
     p->flags = flags;
     p->type = type;
@@ -322,7 +320,7 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     p->write_cb = NULL;
     p->service = service;
 
-    printf("Registering characteristic %16s with UUID %4X to service %4X, index %2d\n", name, uuid.u16.value, service->uuid.u16.value, gatt_param_count);
+    printf("Registering characteristic with UUID %4X to service %4X, index %2d\n", uuid.u16.value, service->uuid.u16.value, gatt_param_count);
 
     service->char_count++;
     return p;
@@ -346,7 +344,7 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
     handle->value_len = len;
     int rc = ble_gatts_notify(g_conn_handle, handle->handle);
     if (rc != 0) {
-        printf("Error notifying characteristic %s: %d, handle %d\n", handle->name, rc, handle->handle);
+        printf("Error notifying characteristic: %d, handle %d\n", rc, handle->handle);
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -404,7 +402,7 @@ int gatt_svr_init(void)
         for (int j = 0; j < svc->char_count; ++j)
         {
             gatt_param_t *p = &gatt_params[j];
-            printf("  Characteristic %d: %16s UUID %4X, Flags %02X\n", j, p->name, p->uuid.u16.value, p->flags);
+            printf("  Characteristic %d: UUID %4X, Flags %02X\n", j, p->uuid.u16.value, p->flags);
         }
     }
 

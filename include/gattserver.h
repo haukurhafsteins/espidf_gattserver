@@ -29,27 +29,27 @@ typedef void (*gatt_write_cb_t)(gatt_param_handle_t handle, void *value, size_t 
 gatt_service_handle_t gattserver_register_service(const ble_uuid_any_t uuid);
 
 gatt_param_handle_t gattserver_register_characteristics_to_service(
-    gatt_service_handle_t service, const char *name, const ble_uuid_any_t uuid,
+    gatt_service_handle_t service, const ble_uuid_any_t uuid,
     gatt_param_type_t type, uint8_t flags, const void *init_value, size_t value_size);
 
 gatt_param_handle_t gattserver_register_float_to_service(
-    gatt_service_handle_t service, const char *name,
+    gatt_service_handle_t service,
     const ble_uuid_any_t uuid, uint8_t flags, float init_value);
 
 gatt_param_handle_t gattserver_register_uint32_to_service(
-    gatt_service_handle_t service, const char *name,
+    gatt_service_handle_t service,
     const ble_uuid_any_t uuid, uint8_t flags, uint32_t init_value);
 
 gatt_param_handle_t gattserver_register_int32_to_service(
-    gatt_service_handle_t service, const char *name,
+    gatt_service_handle_t service,
     const ble_uuid_any_t uuid, uint8_t flags, int32_t init_value);
 
 gatt_param_handle_t gattserver_register_bool_to_service(
-    gatt_service_handle_t service, const char *name,
+    gatt_service_handle_t service,
     const ble_uuid_any_t uuid, uint8_t flags, bool init_value);
 
 gatt_param_handle_t gattserver_register_string_to_service(
-    gatt_service_handle_t service, const char *name,
+    gatt_service_handle_t service,
     const ble_uuid_any_t uuid, uint8_t flags, const char *init_value);
 
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
