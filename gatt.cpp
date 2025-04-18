@@ -24,6 +24,9 @@
 #include "host/ble_uuid.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
+extern "C" {
+#include "services/bas/ble_svc_bas.h"
+}
 // #include "bleprph.h"
 #include "services/ans/ble_svc_ans.h"
 #include "gattserver.h"
@@ -409,6 +412,8 @@ int gatt_svr_init(void)
     ble_svc_gap_init();
     ble_svc_gatt_init();
     //ble_svc_ans_init();
+    ble_svc_bas_init(); // TODO: Create a callback for initialization of 
+    // additional services
 
     int rc = ble_gatts_count_cfg(gatt_svr_svcs);
     if (rc != 0)
