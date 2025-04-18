@@ -67,7 +67,7 @@ typedef struct gatt_param_t {
     ble_uuid_any_t uuid;
     uint8_t flags;
     gatt_param_type_t type;
-    uint8_t value_buf[64];
+    uint8_t value_buf[128]; // TODO: dynamic allocation
     uint16_t value_len;
     uint16_t handle;
     gatt_write_cb_t write_cb;

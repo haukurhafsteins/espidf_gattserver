@@ -55,6 +55,7 @@ gatt_param_handle_t gattserver_register_string_to_service(
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void *value, size_t len);
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value);
+esp_err_t gattserver_notify_uint32(gatt_param_handle_t handle, uint32_t value);
 esp_err_t gattserver_notify_bool(gatt_param_handle_t handle, bool value);
 esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float value);
 

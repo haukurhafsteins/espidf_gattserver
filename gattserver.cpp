@@ -86,6 +86,7 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, s
 }
 
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value) { return gattserver_notify(handle, &value, sizeof(int32_t));}
+esp_err_t gattserver_notify_uint32(gatt_param_handle_t handle, uint32_t value) { return gattserver_notify(handle, &value, sizeof(uint32_t));}
 esp_err_t gattserver_notify_bool(gatt_param_handle_t handle, bool value) { return gattserver_notify(handle, &value, sizeof(bool));}
 esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float value) { return gattserver_notify(handle, &value, sizeof(float));}
 
