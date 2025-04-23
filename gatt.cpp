@@ -323,7 +323,7 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     p->write_cb = NULL;
     p->service = service;
 
-    printf("Registering characteristic with UUID %4X to service %4X, index %2d\n", uuid.u16.value, service->uuid.u16.value, gatt_param_count);
+    // printf("Registering characteristic with UUID %4X to service %4X, index %2d\n", uuid.u16.value, service->uuid.u16.value, gatt_param_count);
 
     service->char_count++;
     return p;
@@ -345,6 +345,14 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
     if (!handle || len > sizeof(handle->value_buf)) return ESP_ERR_INVALID_ARG;
     memcpy(handle->value_buf, new_value, len);
     handle->value_len = len;
+    
+    // Check if there are any subscribed peers before notifying
+    struct ble_gap_conn_desc desc;
+    if (ble_gap_conn_find(g_conn_handle, &desc) != 0 || 
+        (desc.sec_state.encrypted == 0 && desc.sec_state.authenticated == 0)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
     int rc = ble_gatts_notify(g_conn_handle, handle->handle);
     if (rc != 0) {
         printf("Error notifying characteristic: %d, handle %d\n", rc, handle->handle);
