@@ -70,7 +70,7 @@ typedef struct gatt_param_t {
     ble_uuid_any_t uuid;
     uint8_t flags;
     gatt_param_type_t type;
-    uint8_t value_buf[128]; // TODO: dynamic allocation
+    uint8_t value_buf[256]; // TODO: dynamic allocation
     uint16_t value_len;
     uint16_t handle;
     gatt_write_cb_t write_cb;
@@ -318,7 +318,10 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     p->uuid = uuid;
     p->flags = flags;
     p->type = type;
-    memcpy(p->value_buf, init_value, value_size);
+    if (init_value == NULL)
+        memset(p->value_buf, 0, sizeof(p->value_buf));
+    else
+        memcpy(p->value_buf, init_value, value_size);
     p->value_len = value_size;
     p->write_cb = NULL;
     p->service = service;
