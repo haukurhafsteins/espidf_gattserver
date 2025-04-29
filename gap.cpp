@@ -1,4 +1,5 @@
-
+#include <stdio.h>
+#if defined(CONFIG_BT_NIMBLE_ENABLED)
 #include "host/ble_gap.h"
 #include "host/util/util.h"
 
@@ -386,3 +387,4 @@ void gap_advertise(void)
         return;
     }
 }
+#endif

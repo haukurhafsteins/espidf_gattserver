@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(CONFIG_BT_NIMBLE_ENABLED)
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "services/gap/ble_svc_gap.h"
@@ -293,19 +294,17 @@ gatt_service_handle_t gatt_register_service(const ble_uuid_any_t uuid)
 
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len)
 {
+    int rc;
     if (!handle || len > sizeof(handle->value_buf)) return ESP_ERR_INVALID_ARG;
     memcpy(handle->value_buf, new_value, len);
     handle->value_len = len;
     
-    // Check if there are any subscribed peers before notifying
-    struct ble_gap_conn_desc desc;
-    if (ble_gap_conn_find(g_conn_handle, &desc) != 0 || 
-        (desc.sec_state.encrypted == 0 && desc.sec_state.authenticated == 0)) {
-        return ESP_ERR_INVALID_STATE;
-    }
+    // Check if cccd is set
+    // TODO: Check if the characteristic is subscribed. Need to keep a 
+    // local copy of the cccd value for each characteristic
 
-    int rc = ble_gatts_notify(g_conn_handle, handle->handle);
-    if (rc != 0) {
+    rc = ble_gatts_notify(g_conn_handle, handle->handle);
+    if (rc != 0 && rc != BLE_HS_ENOTCONN) {
         printf("Error notifying characteristic: %d, handle %d\n", rc, handle->handle);
         return ESP_FAIL;
     }
@@ -391,3 +390,4 @@ int gatt_svr_init(void)
 
     return 0;
 }
+#endif // CONFIG_BT_ENABLED

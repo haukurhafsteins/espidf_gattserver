@@ -1,6 +1,8 @@
+#include "esp_log.h"
+#if defined(CONFIG_BT_NIMBLE_ENABLED)
+
 #include "host/ble_gatt.h"
 #include "host/ble_hs.h"
-#include "esp_log.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "services/gap/ble_svc_gap.h"
@@ -136,3 +138,4 @@ void gattserver_start(const char* name) {
 
     nimble_port_freertos_init(bleprph_host_task);
 }
+#endif // CONFIG_BT_ENABLED

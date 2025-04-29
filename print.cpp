@@ -8,6 +8,7 @@
  */
 
  #include "esp_log.h"
+ #if defined(CONFIG_BT_NIMBLE_ENABLED)
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "gattserver.h"
@@ -92,3 +93,4 @@ void bleprph_print_conn_desc(struct ble_gap_conn_desc *desc)
                 desc->sec_state.authenticated,
                 desc->sec_state.bonded);
 }
+#endif
