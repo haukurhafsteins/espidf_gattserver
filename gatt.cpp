@@ -309,7 +309,7 @@ gatt_service_handle_t gatt_register_service(const ble_uuid_any_t uuid)
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len)
 {
     int rc;
-    if (!handle || len > sizeof(handle->value_buf)) return ESP_ERR_INVALID_ARG;
+    if (!handle || len > handle->value_len) return ESP_ERR_INVALID_ARG;
     memcpy(handle->value_buf, new_value, len);
     handle->value_len = len;
     
@@ -319,7 +319,7 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
 
     rc = ble_gatts_notify(g_conn_handle, handle->handle);
     if (rc != 0 && rc != BLE_HS_ENOTCONN) {
-        printf("Error notifying characteristic: %d, handle %d\n", rc, handle->handle);
+        printf("\x1b[31m" "Error notifying characteristic: %d, handle %d\n" "\x1b[0m", rc, handle->handle);
         return ESP_FAIL;
     }
     return ESP_OK;
