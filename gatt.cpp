@@ -52,7 +52,7 @@ typedef struct gatt_param_t {
     ble_uuid_any_t uuid;
     uint8_t flags;
     gatt_param_type_t type;
-    uint8_t value_buf[256]; // TODO: dynamic allocation
+    uint8_t *value_buf;
     uint16_t value_len;
     uint16_t handle;
     gatt_write_cb_t write_cb;
@@ -240,7 +240,7 @@ static int gatt_access_cb(uint16_t conn_handle, uint16_t attr_handle,
     else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR)
     {
         int len = OS_MBUF_PKTLEN(ctxt->om);
-        if (len <= sizeof(param->value_buf))
+        if (len <= param->value_len)
         {
             os_mbuf_copydata(ctxt->om, 0, len, param->value_buf);
             param->value_len = len;
@@ -248,6 +248,12 @@ static int gatt_access_cb(uint16_t conn_handle, uint16_t attr_handle,
             {
                 param->write_cb(param, param->value_buf, param->value_len);
             }
+        }
+        else
+        {
+            printf("\x1b[31m" "Error: gatt_access_cb, uuid %X: "
+                "Write length exceeds buffer size (%d > %d).\x1b[0m\n", param->uuid.u16.value, len, param->value_len);
+            return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
         return 0;
     }
@@ -258,24 +264,32 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     gatt_service_handle_t service, const ble_uuid_any_t uuid,
     gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size) {
 
-    if (!service || gatt_param_count >= GATT_MAX_PARAMS || value_size > sizeof(gatt_params[0].value_buf))
+    if (!service || gatt_param_count >= GATT_MAX_PARAMS)
     {
+        printf("\x1b[31m" "Error: gatt_register_characteristics_to_service, uuid %X: "
+            "Invalid arguments or maximum parameters reached.\x1b[0m\n", uuid.u16.value);
         return NULL;
     }
 
-    gatt_param_t* p = &gatt_params[gatt_param_count++];
+    gatt_param_t* p = &gatt_params[gatt_param_count];
+    p->value_buf = (uint8_t*)calloc(1, value_size);
+    if (p->value_buf == NULL)
+    {
+        printf("\x1b[31m" "Error: gatt_register_characteristics_to_service, uuid %X: "
+            "Failed to allocate memory for value buffer.\x1b[0m\n", uuid.u16.value);
+        return NULL;
+    }
+    printf("\x1b[34m" "Registering characteristic with UUID %4X to service %4X, index %2d, size: %d\n" "\x1b[0m", uuid.u16.value, service->uuid.u16.value, gatt_param_count, value_size);
+    gatt_param_count++;
+
     p->uuid = uuid;
     p->flags = flags;
     p->type = type;
-    if (init_value == NULL)
-        memset(p->value_buf, 0, sizeof(p->value_buf));
-    else
+    if (init_value)
         memcpy(p->value_buf, init_value, value_size);
     p->value_len = value_size;
     p->write_cb = NULL;
     p->service = service;
-
-    // printf("Registering characteristic with UUID %4X to service %4X, index %2d\n", uuid.u16.value, service->uuid.u16.value, gatt_param_count);
 
     service->char_count++;
     return p;

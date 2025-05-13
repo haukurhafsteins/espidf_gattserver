@@ -53,6 +53,12 @@ gatt_param_handle_t gattserver_register_float_to_service(
     return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_FLOAT, flags, &init_value, sizeof(init_value));
 }
 
+gatt_param_handle_t gattserver_register_uint8_to_service(
+    gatt_service_handle_t service,
+    const ble_uuid_any_t uuid, uint8_t flags, uint8_t init_value) {
+    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_UINT8, flags, &init_value, sizeof(init_value));
+}
+
 gatt_param_handle_t gattserver_register_uint32_to_service(
     gatt_service_handle_t service,
     const ble_uuid_any_t uuid, uint8_t flags, uint32_t init_value) {
@@ -74,7 +80,8 @@ gatt_param_handle_t gattserver_register_int32_to_service(
 gatt_param_handle_t gattserver_register_string_to_service(
     gatt_service_handle_t service,
     const ble_uuid_any_t uuid, uint8_t flags, const char* init_value) {
-    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_STRING, flags, init_value, strlen(init_value));
+        if (init_value == NULL) { ESP_LOGE(TAG, "String value is NULL"); return NULL; }
+    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_STRING, flags, init_value, strlen(init_value)+1);
 }
 
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb) 
@@ -89,6 +96,7 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, s
 
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value) { return gattserver_notify(handle, &value, sizeof(int32_t));}
 esp_err_t gattserver_notify_uint32(gatt_param_handle_t handle, uint32_t value) { return gattserver_notify(handle, &value, sizeof(uint32_t));}
+esp_err_t gattserver_notify_uint8(gatt_param_handle_t handle, uint8_t value) { return gattserver_notify(handle, &value, sizeof(uint8_t));}
 esp_err_t gattserver_notify_bool(gatt_param_handle_t handle, bool value) { return gattserver_notify(handle, &value, sizeof(bool));}
 esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float value) { return gattserver_notify(handle, &value, sizeof(float));}
 
