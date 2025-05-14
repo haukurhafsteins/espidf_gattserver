@@ -14,9 +14,6 @@ extern "C" {
 #include "gattserver.h"
 #include "gattserver_priv.h"
 
-/*** Maximum number of characteristics with the notify flag ***/
-#define MAX_NOTIFY 5
-
 static const ble_uuid128_t gatt_svr_svc_uuid =
 BLE_UUID128_INIT(0x2d, 0x71, 0xa2, 0x59, 0xb4, 0x58, 0xc8, 0x12,
     0x99, 0x99, 0x43, 0x95, 0x12, 0x2f, 0x46, 0x59);
@@ -54,6 +51,7 @@ typedef struct gatt_param_t {
     gatt_param_type_t type;
     uint8_t *value_buf;
     uint16_t value_len;
+    uint16_t value_maxlen;
     uint16_t handle;
     gatt_write_cb_t write_cb;
     gatt_service_handle_t service;
@@ -240,7 +238,7 @@ static int gatt_access_cb(uint16_t conn_handle, uint16_t attr_handle,
     else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR)
     {
         int len = OS_MBUF_PKTLEN(ctxt->om);
-        if (len <= param->value_len)
+        if (len <= param->value_maxlen)
         {
             os_mbuf_copydata(ctxt->om, 0, len, param->value_buf);
             param->value_len = len;
@@ -288,6 +286,7 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     if (init_value)
         memcpy(p->value_buf, init_value, value_size);
     p->value_len = value_size;
+    p->value_maxlen = value_size;
     p->write_cb = NULL;
     p->service = service;
 
@@ -309,7 +308,9 @@ gatt_service_handle_t gatt_register_service(const ble_uuid_any_t uuid)
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len)
 {
     int rc;
-    if (!handle || len > handle->value_len) return ESP_ERR_INVALID_ARG;
+    if (!handle || len > handle->value_maxlen) 
+        return ESP_ERR_INVALID_ARG;
+
     memcpy(handle->value_buf, new_value, len);
     handle->value_len = len;
     
