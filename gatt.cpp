@@ -64,15 +64,6 @@ static int gatt_param_count = 0;
 static struct ble_gatt_svc_def gatt_svr_svcs[GATT_MAX_SERVICES + 1];
 static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
 
-static void wakeUp(void)
-{
-    // esp_light_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-    // if (cause == ESP_SLEEP_WAKEUP_UNDEFINED) {
-    //     esp_light_sleep_disable();
-    //     printf("Woken up by BLE Write Event\n");
-    // }
-}
-
 static int gatt_svr_write(struct os_mbuf* om, uint16_t min_len, uint16_t max_len,
     void* dst, uint16_t* len)
 {
