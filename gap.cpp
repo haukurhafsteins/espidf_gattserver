@@ -8,7 +8,7 @@
 #include "gattserver_priv.h"
 #include "gattserver.h"
 
-static const char* TAG = "GAP";
+static const char *TAG = "GAP";
 
 static uint8_t own_addr_type;
 uint16_t g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
@@ -67,7 +67,7 @@ void gap_bleprph_on_sync(void)
  *                                  of the return code is specific to the
  *                                  particular GAP event being signalled.
  */
-int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
+int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
 {
     struct ble_gap_conn_desc desc;
     int rc;
@@ -85,8 +85,8 @@ int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
         }
         /* A new connection was established or a connection attempt failed. */
         MODLOG_DFLT(INFO, "connection %s; status=%d ",
-            event->connect.status == 0 ? "established" : "failed",
-            event->connect.status);
+                    event->connect.status == 0 ? "established" : "failed",
+                    event->connect.status);
         if (event->connect.status == 0)
         {
             rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
@@ -129,7 +129,7 @@ int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
     case BLE_GAP_EVENT_CONN_UPDATE:
         /* The central has updated the connection parameters. */
         MODLOG_DFLT(INFO, "connection updated; status=%d ",
-            event->conn_update.status);
+                    event->conn_update.status);
         rc = ble_gap_conn_find(event->conn_update.conn_handle, &desc);
         assert(rc == 0);
         bleprph_print_conn_desc(&desc);
@@ -138,7 +138,7 @@ int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
         MODLOG_DFLT(INFO, "advertise complete; reason=%d",
-            event->adv_complete.reason);
+                    event->adv_complete.reason);
 #if CONFIG_EXAMPLE_EXTENDED_ADV
         ext_bleprph_advertise();
 #else
@@ -149,7 +149,7 @@ int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
     case BLE_GAP_EVENT_ENC_CHANGE:
         /* Encryption has been enabled or disabled for this connection. */
         MODLOG_DFLT(INFO, "encryption change event; status=%d ",
-            event->enc_change.status);
+                    event->enc_change.status);
         rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
         assert(rc == 0);
         bleprph_print_conn_desc(&desc);
@@ -179,9 +179,9 @@ int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
 
     case BLE_GAP_EVENT_MTU:
         MODLOG_DFLT(INFO, "mtu update event; conn_handle=%d cid=%d mtu=%d\n",
-            event->mtu.conn_handle,
-            event->mtu.channel_id,
-            event->mtu.value);
+                    event->mtu.conn_handle,
+                    event->mtu.channel_id,
+                    event->mtu.value);
         break;
 
     case BLE_GAP_EVENT_REPEAT_PAIRING:
@@ -190,7 +190,7 @@ int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
          * convenience: just throw away the old bond and accept the new link.
          */
 
-         /* Delete the old bond. */
+        /* Delete the old bond. */
         rc = ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
         assert(rc == 0);
         ble_store_util_delete_peer(&desc.peer_id_addr);
@@ -265,31 +265,31 @@ int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
 #if MYNEWT_VAL(BLE_POWER_CONTROL)
     case BLE_GAP_EVENT_TRANSMIT_POWER:
         MODLOG_DFLT(INFO, "Transmit power event : status=%d conn_handle=%d reason=%d "
-            "phy=%d power_level=%x power_level_flag=%d delta=%d",
-            event->transmit_power.status,
-            event->transmit_power.conn_handle,
-            event->transmit_power.reason,
-            event->transmit_power.phy,
-            event->transmit_power.transmit_power_level,
-            event->transmit_power.transmit_power_level_flag,
-            event->transmit_power.delta);
+                          "phy=%d power_level=%x power_level_flag=%d delta=%d",
+                    event->transmit_power.status,
+                    event->transmit_power.conn_handle,
+                    event->transmit_power.reason,
+                    event->transmit_power.phy,
+                    event->transmit_power.transmit_power_level,
+                    event->transmit_power.transmit_power_level_flag,
+                    event->transmit_power.delta);
         break;
 
     case BLE_GAP_EVENT_PATHLOSS_THRESHOLD:
         MODLOG_DFLT(INFO, "Pathloss threshold event : conn_handle=%d current path loss=%d "
-            "zone_entered =%d",
-            event->pathloss_threshold.conn_handle,
-            event->pathloss_threshold.current_path_loss,
-            event->pathloss_threshold.zone_entered);
+                          "zone_entered =%d",
+                    event->pathloss_threshold.conn_handle,
+                    event->pathloss_threshold.current_path_loss,
+                    event->pathloss_threshold.zone_entered);
         break;
 #endif
 
 #if MYNEWT_VAL(BLE_EATT_CHAN_NUM) > 0
     case BLE_GAP_EVENT_EATT:
         MODLOG_DFLT(INFO, "EATT %s : conn_handle=%d cid=%d",
-            event->eatt.status ? "disconnected" : "connected",
-            event->eatt.conn_handle,
-            event->eatt.cid);
+                    event->eatt.status ? "disconnected" : "connected",
+                    event->eatt.conn_handle,
+                    event->eatt.cid);
         if (event->eatt.status)
         {
             /* Abort if disconnected */
@@ -316,9 +316,9 @@ int gap_bleprph_event_cb(struct ble_gap_event* event, void* arg)
 #if MYNEWT_VAL(BLE_CONN_SUBRATING)
     case BLE_GAP_EVENT_SUBRATE_CHANGE:
         MODLOG_DFLT(INFO, "Subrate change event : conn_handle=%d status=%d factor=%d",
-            event->subrate_change.conn_handle,
-            event->subrate_change.status,
-            event->subrate_change.subrate_factor);
+                    event->subrate_change.conn_handle,
+                    event->subrate_change.status,
+                    event->subrate_change.subrate_factor);
         break;
 #endif
     }
@@ -330,7 +330,7 @@ void gap_advertise(void)
 {
     struct ble_gap_adv_params adv_params;
     struct ble_hs_adv_fields fields;
-    const char* name;
+    const char *name;
     int rc;
 
     /**
@@ -348,7 +348,7 @@ void gap_advertise(void)
      *     o BLE-only (BR/EDR unsupported).
      */
     fields.flags = BLE_HS_ADV_F_DISC_GEN |
-        BLE_HS_ADV_F_BREDR_UNSUP;
+                   BLE_HS_ADV_F_BREDR_UNSUP;
 
     /* Indicate that the TX power level field should be included; have the
      * stack fill this value automatically.  This is done by assigning the
@@ -358,7 +358,7 @@ void gap_advertise(void)
     fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
 
     name = ble_svc_gap_device_name();
-    fields.name = (uint8_t*)name;
+    fields.name = (uint8_t *)name;
     fields.name_len = strlen(name);
     fields.name_is_complete = 1;
 
@@ -379,8 +379,10 @@ void gap_advertise(void)
     memset(&adv_params, 0, sizeof adv_params);
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+    adv_params.itvl_min = 0x0200;
+    adv_params.itvl_max = 0x0400;
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
-        &adv_params, gap_bleprph_event_cb, NULL);
+                           &adv_params, gap_bleprph_event_cb, NULL);
     if (rc != 0)
     {
         MODLOG_DFLT(ERROR, "error enabling advertisement; rc=%d\n", rc);
