@@ -379,8 +379,8 @@ void gap_advertise(void)
     memset(&adv_params, 0, sizeof adv_params);
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
-    adv_params.itvl_min = 0x0200;
-    adv_params.itvl_max = 0x0400;
+    // adv_params.itvl_min = 0x0200;
+    // adv_params.itvl_max = 0x0300;
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
                            &adv_params, gap_bleprph_event_cb, NULL);
     if (rc != 0)

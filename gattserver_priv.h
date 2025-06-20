@@ -10,6 +10,7 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size);
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len);
 esp_err_t gatt_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
+esp_err_t gatt_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb);
 
 void gap_advertise(void);
 int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg);

@@ -95,6 +95,11 @@ esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb
     return gatt_register_write_cb(handle, cb);
 }
 
+esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb)
+{
+    return gatt_register_read_cb(handle, cb);
+}
+
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len) 
 {
     return gatt_notify(handle, new_value, len);

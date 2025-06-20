@@ -54,6 +54,7 @@ typedef struct gatt_param_t {
     uint16_t value_maxlen;
     uint16_t handle;
     gatt_write_cb_t write_cb;
+    gatt_read_cb_t read_cb;
     gatt_service_handle_t service;
 } gatt_param_t;
 
@@ -224,6 +225,10 @@ static int gatt_access_cb(uint16_t conn_handle, uint16_t attr_handle,
     gatt_param_t* param = (gatt_param_t*)arg;
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR)
     {
+        if (param->read_cb)
+        {
+            param->read_cb(param, param->value_buf, param->value_len);
+        }
         return os_mbuf_append(ctxt->om, param->value_buf, param->value_len);
     }
     else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR)
@@ -279,6 +284,7 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     p->value_len = value_size;
     p->value_maxlen = value_size;
     p->write_cb = NULL;
+    p->read_cb = NULL;
     p->service = service;
 
     service->char_count++;
@@ -321,6 +327,12 @@ esp_err_t gatt_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb)
     if (!handle) return ESP_ERR_INVALID_ARG;
     gatt_param_t* param = (gatt_param_t*)handle;
     param->write_cb = cb;
+    return ESP_OK;
+}
+esp_err_t gatt_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb) {
+    if (!handle) return ESP_ERR_INVALID_ARG;
+    gatt_param_t* param = (gatt_param_t*)handle;
+    param->read_cb = cb;
     return ESP_OK;
 }
 
