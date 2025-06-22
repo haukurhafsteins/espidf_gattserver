@@ -57,15 +57,15 @@ void gap_bleprph_on_sync(void)
  * application associates a GAP event callback with each connection that forms.
  * bleprph uses the same callback for all connections.
  *
- * @param event                 The type of event being signalled.
- * @param ctxt                  Various information pertaining to the event.
- * @param arg                   Application-specified argument; unused by
- *                                  bleprph.
+ * @param event The type of event being signalled.
+ * @param ctxt  Various information pertaining to the event.
+ * @param arg   Application-specified argument; unused by
+ *                  bleprph.
  *
- * @return                      0 if the application successfully handled the
- *                                  event; nonzero on failure.  The semantics
- *                                  of the return code is specific to the
- *                                  particular GAP event being signalled.
+ * @return      0 if the application successfully handled the
+ *                  event; nonzero on failure.  The semantics
+ *                  of the return code is specific to the
+ *                  particular GAP event being signalled.
  */
 int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
 {
@@ -79,13 +79,13 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
         {
             g_conn_handle = event->connect.conn_handle;
 #ifdef USE_LIGHTSLEEP            
-            // struct ble_gap_upd_params conn_params = {
-            //     .itvl_min = 0x00F0, // 300 ms
-            //     .itvl_max = 0x0190, // 400 ms
-            //     .latency = 0,
-            //     .supervision_timeout = 400 // 4 seconds
-            // };
-            // ble_gap_update_params(event->connect.conn_handle, &conn_params);
+            struct ble_gap_upd_params conn_params = {
+                .itvl_min = 0x0058,
+                .itvl_max = 0x0078,
+                .latency = 0,
+                .supervision_timeout = 400 // 4 seconds
+            };
+            ble_gap_update_params(event->connect.conn_handle, &conn_params);
 #endif
         }
         else
@@ -389,8 +389,8 @@ void gap_advertise(void)
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
 #ifdef USE_LIGHTSLEEP 
-    // adv_params.itvl_min = 0x0200;
-    // adv_params.itvl_max = 0x0300;
+    adv_params.itvl_min = 0x0300;
+    adv_params.itvl_max = 0x0400;
 #endif
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
                            &adv_params, gap_bleprph_event_cb, NULL);

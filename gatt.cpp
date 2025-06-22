@@ -388,7 +388,7 @@ int gatt_svr_init(void)
     ble_svc_gap_init();
     ble_svc_gatt_init();
     //ble_svc_ans_init();
-    ble_svc_bas_init(); // TODO: Create a callback for initialization of 
+    // ble_svc_bas_init(); // TODO: Create a callback for initialization of 
     // additional services
 
     int rc = ble_gatts_count_cfg(gatt_svr_svcs);
