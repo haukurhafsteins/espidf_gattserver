@@ -158,4 +158,11 @@ void gattserver_start(const char* name) {
 
     nimble_port_freertos_init(bleprph_host_task);
 }
+
+void gattserver_stop() {
+    gatt_svr_deinit();
+    nimble_port_freertos_deinit();
+    nimble_port_stop();
+    nimble_port_deinit();
+}
 #endif // CONFIG_BT_ENABLED

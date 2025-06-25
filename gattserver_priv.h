@@ -3,6 +3,7 @@
 #include "host/ble_gap.h"
 
 int gatt_svr_init(void);
+void gatt_svr_deinit(void);
 gatt_service_handle_t gatt_register_service(const ble_uuid_any_t uuid);
 void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg);
 gatt_param_handle_t gatt_register_characteristics_to_service(

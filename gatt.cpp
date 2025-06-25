@@ -408,4 +408,11 @@ int gatt_svr_init(void)
 
     return 0;
 }
+
+void gatt_svr_deinit(void)
+{
+    ble_svc_gatt_deinit();
+    ble_svc_gap_deinit();
+}
+
 #endif // CONFIG_BT_ENABLED
