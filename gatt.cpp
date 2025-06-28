@@ -317,7 +317,7 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
 
     rc = ble_gatts_notify(g_conn_handle, handle->handle);
     if (rc != 0 && rc != BLE_HS_ENOTCONN) {
-        printf("\x1b[31m" "Error notifying characteristic: %d, handle %d\n" "\x1b[0m", rc, handle->handle);
+        printf("\x1b[31m" "Error notifying characteristic for %X: %d, handle %d\n" "\x1b[0m", handle->uuid.u16.value, rc, handle->handle);
         return ESP_FAIL;
     }
     return ESP_OK;
