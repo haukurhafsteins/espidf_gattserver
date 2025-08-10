@@ -112,6 +112,14 @@ esp_err_t gattserver_notify_uint8(gatt_param_handle_t handle, uint8_t value) { r
 esp_err_t gattserver_notify_bool(gatt_param_handle_t handle, bool value) { return gattserver_notify(handle, &value, sizeof(bool));}
 esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float value) { return gattserver_notify(handle, &value, sizeof(float));}
 
+void gattserver_set_name(const char* name) {
+    int rc = ble_svc_gap_device_name_set(name);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "Error setting device name: %d", rc);
+    } else {
+        ESP_LOGI(TAG, "Device name set to: %s", name);
+    }
+}
 void gattserver_start(const char* name) {
     /* Initialize the NimBLE host configuration. */
     ble_hs_cfg.reset_cb = bleprph_on_reset;
@@ -150,8 +158,7 @@ void gattserver_start(const char* name) {
     
     gatt_svr_init();
 
-    int rc = ble_svc_gap_device_name_set(name);
-    assert(rc == 0);
+    gattserver_set_name(name);
 
     /* XXX Need to have template for store */
     //ble_store_config_init();

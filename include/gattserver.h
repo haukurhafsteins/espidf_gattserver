@@ -73,4 +73,5 @@ esp_err_t gattserver_notify_bool(gatt_param_handle_t handle, bool value);
 esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float value);
 
 void gattserver_start(const char *name);
+void gattserver_set_name(const char *name);
 void gattserver_stop();
