@@ -11,6 +11,7 @@
 #define GATT_MAX_SERVICES 8
 
 #define GATT_UUID16(uuid) {.u16 = {.u = {.type = BLE_UUID_TYPE_16}, .value = uuid}}
+#define GATT_UUID128(uuid) {.u128 = {.u = {.type = BLE_UUID_TYPE_128}, .value = uuid}}
 
 typedef enum
 {
