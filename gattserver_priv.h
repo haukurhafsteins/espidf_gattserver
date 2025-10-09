@@ -17,6 +17,7 @@ void gap_advertise(void);
 int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg);
 void gap_bleprph_on_sync(void);
 
+const ble_uuid128_t *gatt_get_primary_service_uuid_128();
 
 void bleprph_print_conn_desc(struct ble_gap_conn_desc *desc);
 void print_addr(const void *addr);
