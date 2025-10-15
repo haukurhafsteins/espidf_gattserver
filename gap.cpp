@@ -335,9 +335,44 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
     return 0;
 }
 
+// void gap_advertise(void)
+// {
+//     struct ble_hs_adv_fields f = {};
+//     struct ble_hs_adv_fields rsp = {};
+
+//     // GAP name (keep it short to save space)
+//     const char *name = ble_svc_gap_device_name();
+//     rsp.name = (uint8_t*)name;
+//     rsp.name_len = strlen(name);
+//     rsp.name_is_complete = 1;
+
+//     // Put the 128-bit service UUID in the scan response (or in 'f' if you have space there)
+//     rsp.uuids128 = gatt_get_primary_service_uuid();
+//     rsp.num_uuids128 = 1;
+//     rsp.uuids128_is_complete = 1;
+
+//     // Optional: include battery service (standard 16-bit) in the main ADV
+//     // uint16_t batt_uuid = BLE_UUID16(BLE_GATT_SVC_BATTERY_SERVICE);
+//     // f.uuids16 = (ble_uuid16_t*)&batt_uuid;
+//     // f.num_uuids16 = 1;
+//     // f.uuids16_is_complete = 1;
+
+//     int rc = ble_gap_adv_set_fields(&f);        // ADV payload
+//     assert(rc == 0);
+//     rc = ble_gap_adv_rsp_set_fields(&rsp);      // SCAN_RSP payload
+//     assert(rc == 0);
+
+//     struct ble_gap_adv_params ap = {};
+//     ap.conn_mode = BLE_GAP_CONN_MODE_UND;
+//     ap.disc_mode = BLE_GAP_DISC_MODE_GEN; // sets LE General Discoverable flag
+
+//     rc = ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, NULL, BLE_HS_FOREVER,
+//                            &ap, gap_bleprph_event_cb, NULL);
+//     assert(rc == 0);
+// }
+
 void gap_advertise(void)
 {
-    struct ble_gap_adv_params adv_params;
     struct ble_hs_adv_fields fields;
     const char *name;
     int rc;
@@ -371,6 +406,12 @@ void gap_advertise(void)
     fields.name_len = strlen(name);
     fields.name_is_complete = 1;
 
+    // Put the 128-bit service UUID in the scan response (or in 'f' if you have space there)
+
+    // fields.uuids128 = &gatt_get_primary_service_uuid()->u128;
+    // fields.num_uuids128 = 1;
+    // fields.uuids128_is_complete = 1;
+
     // fields.uuids16 = (ble_uuid16_t[]) {
     //     BLE_UUID16_INIT(GATT_SVR_SVC_ALERT_UUID)
     // };
@@ -384,16 +425,16 @@ void gap_advertise(void)
         return;
     }
 
-    /* Begin advertising. */
-    memset(&adv_params, 0, sizeof adv_params);
-    adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
-    adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+    struct ble_gap_adv_params ap = {};
+    memset(&ap, 0, sizeof ap);
+    ap.conn_mode = BLE_GAP_CONN_MODE_UND;
+    ap.disc_mode = BLE_GAP_DISC_MODE_GEN;
 #ifdef USE_LIGHTSLEEP 
-    adv_params.itvl_min = 0x0200;
-    adv_params.itvl_max = 0x0300;
+    ap.itvl_min = 0x0200;
+    ap.itvl_max = 0x0300;
 #endif
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
-                           &adv_params, gap_bleprph_event_cb, NULL);
+                           &ap, gap_bleprph_event_cb, NULL);
     if (rc != 0)
     {
         MODLOG_DFLT(ERROR, "error enabling advertisement; rc=%d\n", rc);

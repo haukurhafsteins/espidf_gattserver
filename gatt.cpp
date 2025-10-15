@@ -336,9 +336,9 @@ esp_err_t gatt_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb) {
     return ESP_OK;
 }
 
-const ble_uuid128_t *gatt_get_primary_service_uuid_128()
+const ble_uuid_any_t *gatt_get_primary_service_uuid()
 {
-    return &gatt_services[0].uuid.u128;
+    return &gatt_services[0].uuid;
 }
 
 int gatt_svr_init(void)
