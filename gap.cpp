@@ -430,8 +430,8 @@ void gap_advertise(void)
     ap.conn_mode = BLE_GAP_CONN_MODE_UND;
     ap.disc_mode = BLE_GAP_DISC_MODE_GEN;
 #ifdef USE_LIGHTSLEEP 
-    ap.itvl_min = 0x0200;
-    ap.itvl_max = 0x0300;
+    ap.itvl_min = 0x0100;
+    ap.itvl_max = 0x0200;
 #endif
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
                            &ap, gap_bleprph_event_cb, NULL);
