@@ -79,12 +79,11 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
         {
             g_conn_handle = event->connect.conn_handle;
 #ifdef USE_LIGHTSLEEP            
-            struct ble_gap_upd_params conn_params = {
-                .itvl_min = 0x0048,
-                .itvl_max = 0x0068,
-                .latency = 0,
-                .supervision_timeout = 400 // 4 seconds
-            };
+            struct ble_gap_upd_params conn_params = {};
+            conn_params.itvl_min = 0x0048;
+            conn_params.itvl_max = 0x0068;
+            conn_params.latency = 0;
+            conn_params.supervision_timeout = 400; // 4 seconds
             ble_gap_update_params(event->connect.conn_handle, &conn_params);
 #endif
         }
