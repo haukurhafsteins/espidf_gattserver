@@ -78,7 +78,7 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
         if (event->connect.status == 0)
         {
             g_conn_handle = event->connect.conn_handle;
-#ifdef USE_LIGHTSLEEP            
+#ifdef USE_LIGHTSLEEP
             struct ble_gap_upd_params conn_params = {};
             conn_params.itvl_min = 0x0048;
             conn_params.itvl_max = 0x0068;
@@ -407,9 +407,12 @@ void gap_advertise(void)
 
     // Put the 128-bit service UUID in the scan response (or in 'f' if you have space there)
 
-    // fields.uuids128 = &gatt_get_primary_service_uuid()->u128;
-    // fields.num_uuids128 = 1;
-    // fields.uuids128_is_complete = 1;
+    const ble_uuid_any_t *primary = gatt_get_primary_service_uuid();
+    fields.uuids16 = (ble_uuid16_t[]){
+        BLE_UUID16_INIT(primary->u16.value)
+    };
+    fields.num_uuids16 = 1;
+    fields.uuids16_is_complete = 1;
 
     // fields.uuids16 = (ble_uuid16_t[]) {
     //     BLE_UUID16_INIT(GATT_SVR_SVC_ALERT_UUID)
@@ -428,7 +431,7 @@ void gap_advertise(void)
     memset(&ap, 0, sizeof ap);
     ap.conn_mode = BLE_GAP_CONN_MODE_UND;
     ap.disc_mode = BLE_GAP_DISC_MODE_GEN;
-#ifdef USE_LIGHTSLEEP 
+#ifdef USE_LIGHTSLEEP
     ap.itvl_min = 0x0100;
     ap.itvl_max = 0x0200;
 #endif
