@@ -56,6 +56,9 @@ typedef struct gatt_param_t {
     gatt_write_cb_t write_cb;
     gatt_read_cb_t read_cb;
     gatt_service_handle_t service;
+    bool notify_subscribed;
+    bool indicate_subscribed;
+    uint16_t subscribed_conn_handle;
 } gatt_param_t;
 
 static gatt_service_t gatt_services[GATT_MAX_SERVICES];
@@ -64,6 +67,18 @@ static gatt_param_t gatt_params[GATT_MAX_PARAMS];
 static int gatt_param_count = 0;
 static struct ble_gatt_svc_def gatt_svr_svcs[GATT_MAX_SERVICES + 1];
 static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
+
+static gatt_param_t* gatt_find_param_by_handle(uint16_t attr_handle)
+{
+    for (int i = 0; i < gatt_param_count; ++i)
+    {
+        if (gatt_params[i].handle == attr_handle)
+        {
+            return &gatt_params[i];
+        }
+    }
+    return NULL;
+}
 
 static int gatt_svr_write(struct os_mbuf* om, uint16_t min_len, uint16_t max_len,
     void* dst, uint16_t* len)
@@ -286,6 +301,9 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     p->write_cb = NULL;
     p->read_cb = NULL;
     p->service = service;
+    p->notify_subscribed = false;
+    p->indicate_subscribed = false;
+    p->subscribed_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 
     service->char_count++;
     return p;
@@ -311,16 +329,51 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
     memcpy(handle->value_buf, new_value, len);
     handle->value_len = len;
     
-    // Check if cccd is set
-    // TODO: Check if the characteristic is subscribed. Need to keep a 
-    // local copy of the cccd value for each characteristic
+    if (!handle->notify_subscribed || handle->subscribed_conn_handle == BLE_HS_CONN_HANDLE_NONE)
+    {
+        return ESP_OK;
+    }
 
-    rc = ble_gatts_notify(g_conn_handle, handle->handle);
+    rc = ble_gatts_notify(handle->subscribed_conn_handle, handle->handle);
     if (rc != 0 && rc != BLE_HS_ENOTCONN) {
         printf("\x1b[31m" "Error notifying characteristic for %X: %d, handle %d\n" "\x1b[0m", handle->uuid.u16.value, rc, handle->handle);
         return ESP_FAIL;
     }
     return ESP_OK;
+}
+
+void gatt_update_subscription_state(uint16_t conn_handle, uint16_t attr_handle,
+    bool notify_enabled, bool indicate_enabled)
+{
+    gatt_param_t* param = gatt_find_param_by_handle(attr_handle);
+    if (!param)
+    {
+        return;
+    }
+
+    param->notify_subscribed = notify_enabled;
+    param->indicate_subscribed = indicate_enabled;
+    if (notify_enabled || indicate_enabled)
+    {
+        param->subscribed_conn_handle = conn_handle;
+    }
+    else
+    {
+        param->subscribed_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+    }
+}
+
+void gatt_clear_subscription_state(uint16_t conn_handle)
+{
+    for (int i = 0; i < gatt_param_count; ++i)
+    {
+        if (gatt_params[i].subscribed_conn_handle == conn_handle)
+        {
+            gatt_params[i].notify_subscribed = false;
+            gatt_params[i].indicate_subscribed = false;
+            gatt_params[i].subscribed_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+        }
+    }
 }
 
 esp_err_t gatt_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb) {

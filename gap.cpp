@@ -121,6 +121,7 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
         break;
 
     case BLE_GAP_EVENT_DISCONNECT:
+        gatt_clear_subscription_state(event->disconnect.conn.conn_handle);
         g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
         MODLOG_DFLT(INFO, "disconnect; reason=%d ", event->disconnect.reason);
         bleprph_print_conn_desc(&event->disconnect.conn);
@@ -174,6 +175,11 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
         break;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
+        gatt_update_subscription_state(
+            event->subscribe.conn_handle,
+            event->subscribe.attr_handle,
+            event->subscribe.cur_notify != 0,
+            event->subscribe.cur_indicate != 0);
         // MODLOG_DFLT(INFO, "subscribe event; conn_handle=%d attr_handle=%d "
         //                   "reason=%d prevn=%d curn=%d previ=%d curi=%d\n",
         //             event->subscribe.conn_handle,

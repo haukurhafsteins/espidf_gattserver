@@ -12,6 +12,9 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len);
 esp_err_t gatt_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
 esp_err_t gatt_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb);
+void gatt_update_subscription_state(uint16_t conn_handle, uint16_t attr_handle,
+    bool notify_enabled, bool indicate_enabled);
+void gatt_clear_subscription_state(uint16_t conn_handle);
 
 void gap_advertise(void);
 int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg);
@@ -23,4 +26,3 @@ void bleprph_print_conn_desc(struct ble_gap_conn_desc *desc);
 void print_addr(const void *addr);
 
 extern uint16_t g_conn_handle;
-
