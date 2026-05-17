@@ -282,7 +282,7 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
 
     gatt_param_t* p = &gatt_params[gatt_param_count];
     p->value_buf = (uint8_t*)calloc(1, value_size);
-    if (p->value_buf == NULL)
+    if (value_size != 0 && p->value_buf == NULL)
     {
         printf("\x1b[31m" "Error: gatt_register_characteristics_to_service, uuid %X: "
             "Failed to allocate memory for value buffer.\x1b[0m\n", uuid.u16.value);
