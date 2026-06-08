@@ -3,6 +3,7 @@
 
 #include "host/ble_gatt.h"
 #include "host/ble_hs.h"
+#include "host/ble_att.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "services/gap/ble_svc_gap.h"
@@ -100,6 +101,12 @@ esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t
     return gatt_register_read_cb(handle, cb);
 }
 
+void gattserver_register_disconnect_cb(gatt_disconnect_cb_t cb)
+{
+    extern gatt_disconnect_cb_t g_disconnect_cb;
+    g_disconnect_cb = cb;
+}
+
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len) 
 {
     return gatt_notify(handle, new_value, len);
@@ -157,6 +164,10 @@ void gattserver_start(const char* name) {
     }
     
     gatt_svr_init();
+
+    /* Allow a larger ATT MTU so notifications up to ~250B (RepCtx 60B, live
+       signals) aren't truncated to the 23-byte default. */
+    ble_att_set_preferred_mtu(256);
 
     gattserver_set_name(name);
 
