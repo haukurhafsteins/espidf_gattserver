@@ -28,6 +28,8 @@ typedef struct gatt_param_t *gatt_param_handle_t;
 typedef struct gatt_service_t *gatt_service_handle_t;
 typedef void (*gatt_write_cb_t)(gatt_param_handle_t handle, void *value, size_t len);
 typedef void (*gatt_read_cb_t)(gatt_param_handle_t handle, void *value, size_t len);
+typedef void (*gatt_disconnect_cb_t)(void);
+void gattserver_register_disconnect_cb(gatt_disconnect_cb_t cb);
 
 gatt_service_handle_t gattserver_register_service(const ble_uuid_any_t uuid);
 
