@@ -342,6 +342,15 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
     return ESP_OK;
 }
 
+bool gatt_is_notify_subscribed(gatt_param_handle_t handle)
+{
+    // Mirrors the gate in gatt_notify(): "subscribed" means a peer has enabled
+    // notifications AND is currently connected, i.e. a notify would actually go
+    // out. Lets callers skip expensive payload generation when nobody listens.
+    return handle && handle->notify_subscribed &&
+           handle->subscribed_conn_handle != BLE_HS_CONN_HANDLE_NONE;
+}
+
 void gatt_update_subscription_state(uint16_t conn_handle, uint16_t attr_handle,
     bool notify_enabled, bool indicate_enabled)
 {
