@@ -107,9 +107,14 @@ void gattserver_register_disconnect_cb(gatt_disconnect_cb_t cb)
     g_disconnect_cb = cb;
 }
 
-esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len) 
+esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len)
 {
     return gatt_notify(handle, new_value, len);
+}
+
+bool gattserver_is_notify_subscribed(gatt_param_handle_t handle)
+{
+    return gatt_is_notify_subscribed(handle);
 }
 
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value) { return gattserver_notify(handle, &value, sizeof(int32_t));}

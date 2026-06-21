@@ -408,31 +408,44 @@ void gap_advertise(void)
     fields.tx_pwr_lvl_is_present = 1;
     fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
 
+    // Fixed overhead: flags(3) + tx power(3) + uuid16(4) + name header(2)
+    // leaves 19 bytes of the 31-byte legacy ADV PDU for the name itself.
+    constexpr size_t ADV_NAME_MAX = 19;
+
     name = ble_svc_gap_device_name();
+    size_t name_len = strlen(name);
     fields.name = (uint8_t *)name;
-    fields.name_len = strlen(name);
-    fields.name_is_complete = 1;
+    fields.name_len = name_len <= ADV_NAME_MAX ? name_len : ADV_NAME_MAX;
+    fields.name_is_complete = name_len <= ADV_NAME_MAX;
 
-    // Put the 128-bit service UUID in the scan response (or in 'f' if you have space there)
-
+    // Static storage: a GNU compound literal here is a temporary in C++, so
+    // the previous code handed ble_gap_adv_set_fields a dangling pointer
+    // that only worked because the dead stack slot wasn't reused yet.
     const ble_uuid_any_t *primary = gatt_get_primary_service_uuid();
-    fields.uuids16 = (ble_uuid16_t[]){
-        BLE_UUID16_INIT(primary->u16.value)
-    };
+    static ble_uuid16_t adv_uuid16 = BLE_UUID16_INIT(0);
+    adv_uuid16.value = primary->u16.value;
+    fields.uuids16 = &adv_uuid16;
     fields.num_uuids16 = 1;
     fields.uuids16_is_complete = 1;
-
-    // fields.uuids16 = (ble_uuid16_t[]) {
-    //     BLE_UUID16_INIT(GATT_SVR_SVC_ALERT_UUID)
-    // };
-    // fields.num_uuids16 = 1;
-    // fields.uuids16_is_complete = 1;
 
     rc = ble_gap_adv_set_fields(&fields);
     if (rc != 0)
     {
-        MODLOG_DFLT(ERROR, "error setting advertisement data; rc=%d\n", rc);
-        return;
+        // NEVER give up on advertising: an unadvertisable payload (e.g. an
+        // overlong name that slipped into NVS before length validation
+        // existed) used to leave the device unreachable until reflash.
+        // Retry with the name dropped entirely — a nameless device that
+        // connects beats a named one that doesn't.
+        MODLOG_DFLT(ERROR, "error setting advertisement data; rc=%d, retrying without name\n", rc);
+        fields.name = NULL;
+        fields.name_len = 0;
+        fields.name_is_complete = 0;
+        rc = ble_gap_adv_set_fields(&fields);
+        if (rc != 0)
+        {
+            MODLOG_DFLT(ERROR, "error setting minimal advertisement data; rc=%d\n", rc);
+            return;
+        }
     }
 
     struct ble_gap_adv_params ap = {};

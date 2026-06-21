@@ -75,6 +75,11 @@ esp_err_t gattserver_notify_uint32(gatt_param_handle_t handle, uint32_t value);
 esp_err_t gattserver_notify_bool(gatt_param_handle_t handle, bool value);
 esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float value);
 
+// True when a peer has notifications enabled on this characteristic and is
+// connected (i.e. a notify would actually be sent). Use to skip generating a
+// payload nobody is subscribed to receive.
+bool gattserver_is_notify_subscribed(gatt_param_handle_t handle);
+
 void gattserver_start(const char *name);
 void gattserver_set_name(const char *name);
 void gattserver_stop();
