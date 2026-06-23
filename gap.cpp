@@ -14,6 +14,30 @@ static uint8_t own_addr_type;
 uint16_t g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 gatt_disconnect_cb_t g_disconnect_cb = nullptr;
 
+void gattserver_set_fast_conn(bool fast)
+{
+    if (g_conn_handle == BLE_HS_CONN_HANDLE_NONE)
+        return;
+    struct ble_gap_upd_params p = {};
+    if (fast)
+    {
+        // ~15-30 ms — high throughput for OTA, within iOS's accepted range.
+        p.itvl_min = 0x000C; // 12 * 1.25 ms = 15 ms
+        p.itvl_max = 0x0018; // 24 * 1.25 ms = 30 ms
+        p.latency = 0;
+        p.supervision_timeout = 400; // 4 s
+    }
+    else
+    {
+        // Power-saving interval (matches the default requested on connect).
+        p.itvl_min = 0x0048; // 90 ms
+        p.itvl_max = 0x0068; // 130 ms
+        p.latency = 0;
+        p.supervision_timeout = 400; // 4 s
+    }
+    ble_gap_update_params(g_conn_handle, &p);
+}
+
 void gap_bleprph_on_sync(void)
 {
     int rc;

@@ -83,3 +83,9 @@ bool gattserver_is_notify_subscribed(gatt_param_handle_t handle);
 void gattserver_start(const char *name);
 void gattserver_set_name(const char *name);
 void gattserver_stop();
+
+// Request connection parameters on the active link. fast=true asks for a short
+// (~15-30 ms) interval for high-throughput transfers like firmware OTA; fast=false
+// restores the power-saving interval. No-op if nothing is connected. The central
+// (e.g. iOS) may accept or reject the request per its own rules.
+void gattserver_set_fast_conn(bool fast);
