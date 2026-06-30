@@ -13,6 +13,8 @@ static const char *TAG = "GAP";
 static uint8_t own_addr_type;
 uint16_t g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 gatt_disconnect_cb_t g_disconnect_cb = nullptr;
+static uint8_t g_last_disconnect_reason = 0;
+uint8_t gattserver_get_last_disconnect_reason(void) { return g_last_disconnect_reason; }
 
 void gattserver_set_fast_conn(bool fast)
 {
@@ -148,6 +150,7 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_DISCONNECT:
         gatt_clear_subscription_state(event->disconnect.conn.conn_handle);
         g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+        g_last_disconnect_reason = event->disconnect.reason;
         if (g_disconnect_cb) g_disconnect_cb(); // e.g. firmware turns the LED off
         MODLOG_DFLT(INFO, "disconnect; reason=%d ", event->disconnect.reason);
         bleprph_print_conn_desc(&event->disconnect.conn);
