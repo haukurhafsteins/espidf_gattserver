@@ -17,6 +17,33 @@
 #define TAG "GATTServer"
 #define GATT_MAX_PARAMS 60
 
+// The public API is stack-neutral (gatt_uuid_t, GATT_CHR_PROP_*); NimBLE
+// types exist only behind this boundary. Convert here.
+static ble_uuid_any_t to_ble_uuid(const gatt_uuid_t &u)
+{
+    ble_uuid_any_t b = {};
+    if (u.type == GATT_UUID_TYPE_16)
+    {
+        b.u16.u.type = BLE_UUID_TYPE_16;
+        b.u16.value = u.value.u16;
+    }
+    else
+    {
+        b.u128.u.type = BLE_UUID_TYPE_128;
+        memcpy(b.u128.value, u.value.u128, sizeof(b.u128.value));
+    }
+    return b;
+}
+
+// The neutral property flags are the Bluetooth spec bit values and are passed
+// through unconverted - prove they match NimBLE's constants.
+static_assert(GATT_CHR_PROP_BROADCAST == BLE_GATT_CHR_PROP_BROADCAST);
+static_assert(GATT_CHR_PROP_READ == BLE_GATT_CHR_PROP_READ);
+static_assert(GATT_CHR_PROP_WRITE_NO_RSP == BLE_GATT_CHR_PROP_WRITE_NO_RSP);
+static_assert(GATT_CHR_PROP_WRITE == BLE_GATT_CHR_PROP_WRITE);
+static_assert(GATT_CHR_PROP_NOTIFY == BLE_GATT_CHR_PROP_NOTIFY);
+static_assert(GATT_CHR_PROP_INDICATE == BLE_GATT_CHR_PROP_INDICATE);
+
 typedef gatt_service_t* gatt_service_handle_t;
 
 typedef void (*gatt_write_cb_t)(gatt_param_handle_t handle, void* value, size_t len);
@@ -36,59 +63,59 @@ static void bleprph_on_reset(int reason)
     MODLOG_DFLT(ERROR, "Resetting state; reason=%d\n", reason);
 }
 
-gatt_service_handle_t gattserver_register_service(const ble_uuid_any_t uuid) 
+gatt_service_handle_t gattserver_register_service(const gatt_uuid_t uuid) 
 {
-    return gatt_register_service(uuid);
+    return gatt_register_service(to_ble_uuid(uuid));
 }
 
 gatt_param_handle_t gattserver_register_characteristics_to_service(
-    gatt_service_handle_t service, const ble_uuid_any_t uuid,
+    gatt_service_handle_t service, const gatt_uuid_t uuid,
     gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size) 
 {
-    return gatt_register_characteristics_to_service(service, uuid, type, flags, init_value, value_size);
+    return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), type, flags, init_value, value_size);
 }
 
 gatt_param_handle_t gattserver_register_float_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, float init_value) {
-    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_FLOAT, flags, &init_value, sizeof(init_value));
+    const gatt_uuid_t uuid, uint8_t flags, float init_value) {
+    return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_FLOAT, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_int8_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, int8_t init_value) {
-    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_UINT8, flags, &init_value, sizeof(init_value));
+    const gatt_uuid_t uuid, uint8_t flags, int8_t init_value) {
+    return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_UINT8, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_uint8_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, uint8_t init_value) {
-    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_UINT8, flags, &init_value, sizeof(init_value));
+    const gatt_uuid_t uuid, uint8_t flags, uint8_t init_value) {
+    return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_UINT8, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_uint32_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, uint32_t init_value) {
-    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_UINT32, flags, &init_value, sizeof(init_value));
+    const gatt_uuid_t uuid, uint8_t flags, uint32_t init_value) {
+    return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_UINT32, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_bool_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, bool init_value) {
-    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_UINT32, flags, &init_value, sizeof(init_value));
+    const gatt_uuid_t uuid, uint8_t flags, bool init_value) {
+    return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_UINT32, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_int32_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, int32_t init_value) {
-    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_INT32, flags, &init_value, sizeof(init_value));
+    const gatt_uuid_t uuid, uint8_t flags, int32_t init_value) {
+    return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_INT32, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_string_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, const char* init_value) {
+    const gatt_uuid_t uuid, uint8_t flags, const char* init_value) {
         if (init_value == NULL) { ESP_LOGE(TAG, "String value is NULL"); return NULL; }
-    return gatt_register_characteristics_to_service(service, uuid, GATT_PARAM_TYPE_STRING, flags, init_value, strlen(init_value)+1);
+    return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_STRING, flags, init_value, strlen(init_value)+1);
 }
 
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb) 

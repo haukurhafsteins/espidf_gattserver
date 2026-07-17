@@ -4,14 +4,40 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#include "host/ble_uuid.h"
-#include "host/ble_gatt.h"
-
 #define GATT_MAX_PARAMS 60
 #define GATT_MAX_SERVICES 8
 
-#define GATT_UUID16(uuid) {.u16 = {.u = {.type = BLE_UUID_TYPE_16}, .value = uuid}}
-#define GATT_UUID128(uuid) {.u128 = {.u = {.type = BLE_UUID_TYPE_128}, .value = uuid}}
+// Platform-neutral public API: no Bluetooth-stack types leak out of this
+// header. The backend converts gatt_uuid_t at the boundary, so callers stay
+// portable across stacks (NimBLE today, Zephyr BLE host later).
+typedef enum
+{
+    GATT_UUID_TYPE_16 = 0,
+    GATT_UUID_TYPE_128 = 1,
+} gatt_uuid_type_t;
+
+typedef struct
+{
+    uint8_t type; // gatt_uuid_type_t
+    union
+    {
+        uint16_t u16;
+        uint8_t u128[16]; // little-endian, as transmitted on air
+    } value;
+} gatt_uuid_t;
+
+#define GATT_UUID16(uuid) {.type = GATT_UUID_TYPE_16, .value = {.u16 = (uuid)}}
+#define GATT_UUID128(...) {.type = GATT_UUID_TYPE_128, .value = {.u128 = __VA_ARGS__}}
+
+// Characteristic property flags - Bluetooth spec bit values. The backend
+// static_asserts these match its stack's constants, so passing them straight
+// through is safe on any conforming stack.
+#define GATT_CHR_PROP_BROADCAST 0x01
+#define GATT_CHR_PROP_READ 0x02
+#define GATT_CHR_PROP_WRITE_NO_RSP 0x04
+#define GATT_CHR_PROP_WRITE 0x08
+#define GATT_CHR_PROP_NOTIFY 0x10
+#define GATT_CHR_PROP_INDICATE 0x20
 
 typedef enum
 {
@@ -33,39 +59,39 @@ void gattserver_register_disconnect_cb(gatt_disconnect_cb_t cb);
 // Last BLE disconnect reason code (link-layer), for reconnect-time triage.
 uint8_t gattserver_get_last_disconnect_reason(void);
 
-gatt_service_handle_t gattserver_register_service(const ble_uuid_any_t uuid);
+gatt_service_handle_t gattserver_register_service(const gatt_uuid_t uuid);
 
 gatt_param_handle_t gattserver_register_characteristics_to_service(
-    gatt_service_handle_t service, const ble_uuid_any_t uuid,
+    gatt_service_handle_t service, const gatt_uuid_t uuid,
     gatt_param_type_t type, uint8_t flags, const void *init_value, size_t value_size);
 
 gatt_param_handle_t gattserver_register_float_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, float init_value);
+    const gatt_uuid_t uuid, uint8_t flags, float init_value);
 
 gatt_param_handle_t gattserver_register_int8_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, int8_t init_value);
+    const gatt_uuid_t uuid, uint8_t flags, int8_t init_value);
 
 gatt_param_handle_t gattserver_register_uint8_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, uint8_t init_value);
+    const gatt_uuid_t uuid, uint8_t flags, uint8_t init_value);
 
 gatt_param_handle_t gattserver_register_uint32_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, uint32_t init_value);
+    const gatt_uuid_t uuid, uint8_t flags, uint32_t init_value);
 
 gatt_param_handle_t gattserver_register_int32_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, int32_t init_value);
+    const gatt_uuid_t uuid, uint8_t flags, int32_t init_value);
 
 gatt_param_handle_t gattserver_register_bool_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, bool init_value);
+    const gatt_uuid_t uuid, uint8_t flags, bool init_value);
 
 gatt_param_handle_t gattserver_register_string_to_service(
     gatt_service_handle_t service,
-    const ble_uuid_any_t uuid, uint8_t flags, const char *init_value);
+    const gatt_uuid_t uuid, uint8_t flags, const char *init_value);
 
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
 esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb);
