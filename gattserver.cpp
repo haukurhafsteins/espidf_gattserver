@@ -43,6 +43,11 @@ static_assert(GATT_CHR_PROP_WRITE_NO_RSP == BLE_GATT_CHR_PROP_WRITE_NO_RSP);
 static_assert(GATT_CHR_PROP_WRITE == BLE_GATT_CHR_PROP_WRITE);
 static_assert(GATT_CHR_PROP_NOTIFY == BLE_GATT_CHR_PROP_NOTIFY);
 static_assert(GATT_CHR_PROP_INDICATE == BLE_GATT_CHR_PROP_INDICATE);
+static_assert(GATT_CHR_F_READ_ENC == BLE_GATT_CHR_F_READ_ENC);
+static_assert(GATT_CHR_F_WRITE_ENC == BLE_GATT_CHR_F_WRITE_ENC);
+static_assert(sizeof(gatt_chr_flags_t) == sizeof(ble_gatt_chr_flags));
+
+extern "C" void ble_store_config_init(void);
 
 typedef gatt_service_t* gatt_service_handle_t;
 
@@ -70,50 +75,50 @@ gatt_service_handle_t gattserver_register_service(const gatt_uuid_t uuid)
 
 gatt_param_handle_t gattserver_register_characteristics_to_service(
     gatt_service_handle_t service, const gatt_uuid_t uuid,
-    gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size) 
+    gatt_param_type_t type, gatt_chr_flags_t flags, const void* init_value, size_t value_size)
 {
     return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), type, flags, init_value, value_size);
 }
 
 gatt_param_handle_t gattserver_register_float_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, float init_value) {
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, float init_value) {
     return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_FLOAT, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_int8_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, int8_t init_value) {
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, int8_t init_value) {
     return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_UINT8, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_uint8_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, uint8_t init_value) {
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, uint8_t init_value) {
     return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_UINT8, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_uint32_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, uint32_t init_value) {
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, uint32_t init_value) {
     return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_UINT32, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_bool_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, bool init_value) {
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, bool init_value) {
     return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_UINT32, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_int32_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, int32_t init_value) {
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, int32_t init_value) {
     return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_INT32, flags, &init_value, sizeof(init_value));
 }
 
 gatt_param_handle_t gattserver_register_string_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, const char* init_value) {
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, const char* init_value) {
         if (init_value == NULL) { ESP_LOGE(TAG, "String value is NULL"); return NULL; }
     return gatt_register_characteristics_to_service(service, to_ble_uuid(uuid), GATT_PARAM_TYPE_STRING, flags, init_value, strlen(init_value)+1);
 }
@@ -167,27 +172,14 @@ void gattserver_start(const char* name) {
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
-#ifdef CONFIG_EXAMPLE_BONDING
     ble_hs_cfg.sm_bonding = 1;
+    ble_hs_cfg.sm_mitm = 0;
+    ble_hs_cfg.sm_sc = 1;
     /* Enable the appropriate bit masks to make sure the keys
      * that are needed are exchanged
      */
     ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
     ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
-#endif
-#ifdef CONFIG_EXAMPLE_MITM
-    ble_hs_cfg.sm_mitm = 1;
-#endif
-#ifdef CONFIG_EXAMPLE_USE_SC
-    ble_hs_cfg.sm_sc = 1;
-#else
-    ble_hs_cfg.sm_sc = 0;
-#endif
-#ifdef CONFIG_EXAMPLE_RESOLVE_PEER_ADDR
-    /* Stores the IRK */
-    ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ID;
-    ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ID;
-#endif
 
     esp_err_t ret = nimble_port_init();
     if (ret != ESP_OK) {
@@ -203,8 +195,7 @@ void gattserver_start(const char* name) {
 
     gattserver_set_name(name);
 
-    /* XXX Need to have template for store */
-    //ble_store_config_init();
+    ble_store_config_init();
 
     nimble_port_freertos_init(bleprph_host_task);
 }
