@@ -176,10 +176,17 @@ void gattserver_start(const char* name) {
     ble_hs_cfg.sm_mitm = 0;
     ble_hs_cfg.sm_sc = 1;
     /* Enable the appropriate bit masks to make sure the keys
-     * that are needed are exchanged
+     * that are needed are exchanged.
+     *
+     * IDENTITY (IRK) distribution is REQUIRED, not optional: phones connect
+     * with resolvable private addresses that rotate (~15 min). Without the
+     * peer's IRK the bond is stored under the pairing-time RPA, so after the
+     * first rotation the device cannot match the phone to its stored LTK,
+     * encryption fails with "key missing" and the phone drops every connect
+     * until the user forgets the device (field brick, A2 band 2026-07-20).
      */
-    ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
-    ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
+    ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+    ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
 
     esp_err_t ret = nimble_port_init();
     if (ret != ESP_OK) {
