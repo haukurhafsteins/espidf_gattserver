@@ -47,7 +47,7 @@ typedef gatt_param_t* gatt_param_handle_t;
 
 typedef struct gatt_param_t {
     ble_uuid_any_t uuid;
-    uint8_t flags;
+    ble_gatt_chr_flags flags;
     gatt_param_type_t type;
     uint8_t *value_buf;
     uint16_t value_len;
@@ -271,7 +271,7 @@ static int gatt_access_cb(uint16_t conn_handle, uint16_t attr_handle,
 
 gatt_param_handle_t gatt_register_characteristics_to_service(
     gatt_service_handle_t service, const ble_uuid_any_t uuid,
-    gatt_param_type_t type, uint8_t flags, const void* init_value, size_t value_size) {
+    gatt_param_type_t type, ble_gatt_chr_flags flags, const void* init_value, size_t value_size) {
 
     if (!service || gatt_param_count >= GATT_MAX_PARAMS)
     {

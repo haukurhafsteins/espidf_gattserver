@@ -39,6 +39,13 @@ typedef struct
 #define GATT_CHR_PROP_NOTIFY 0x10
 #define GATT_CHR_PROP_INDICATE 0x20
 
+// Full-width characteristic flags. Security requirements occupy bits above
+// the one-byte Bluetooth property field, so callers and backends must retain
+// all 32 bits.
+typedef uint32_t gatt_chr_flags_t;
+#define GATT_CHR_F_READ_ENC 0x00000200u
+#define GATT_CHR_F_WRITE_ENC 0x00001000u
+
 typedef enum
 {
     GATT_PARAM_TYPE_INT32,
@@ -63,35 +70,35 @@ gatt_service_handle_t gattserver_register_service(const gatt_uuid_t uuid);
 
 gatt_param_handle_t gattserver_register_characteristics_to_service(
     gatt_service_handle_t service, const gatt_uuid_t uuid,
-    gatt_param_type_t type, uint8_t flags, const void *init_value, size_t value_size);
+    gatt_param_type_t type, gatt_chr_flags_t flags, const void *init_value, size_t value_size);
 
 gatt_param_handle_t gattserver_register_float_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, float init_value);
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, float init_value);
 
 gatt_param_handle_t gattserver_register_int8_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, int8_t init_value);
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, int8_t init_value);
 
 gatt_param_handle_t gattserver_register_uint8_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, uint8_t init_value);
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, uint8_t init_value);
 
 gatt_param_handle_t gattserver_register_uint32_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, uint32_t init_value);
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, uint32_t init_value);
 
 gatt_param_handle_t gattserver_register_int32_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, int32_t init_value);
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, int32_t init_value);
 
 gatt_param_handle_t gattserver_register_bool_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, bool init_value);
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, bool init_value);
 
 gatt_param_handle_t gattserver_register_string_to_service(
     gatt_service_handle_t service,
-    const gatt_uuid_t uuid, uint8_t flags, const char *init_value);
+    const gatt_uuid_t uuid, gatt_chr_flags_t flags, const char *init_value);
 
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
 esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb);
