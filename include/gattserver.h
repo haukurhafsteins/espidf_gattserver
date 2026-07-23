@@ -60,6 +60,12 @@ typedef enum
 typedef struct gatt_param_t *gatt_param_handle_t;
 typedef struct gatt_service_t *gatt_service_handle_t;
 typedef void (*gatt_write_cb_t)(gatt_param_handle_t handle, void *value, size_t len);
+typedef uint8_t gatt_write_status_t;
+#define GATT_WRITE_OK 0x00u
+#define GATT_WRITE_ERR_UNLIKELY 0x0eu
+#define GATT_WRITE_ERR_INSUFFICIENT_RESOURCES 0x11u
+typedef gatt_write_status_t (*gatt_write_status_cb_t)(
+    gatt_param_handle_t handle, void *value, size_t len);
 typedef void (*gatt_read_cb_t)(gatt_param_handle_t handle, void *value, size_t len);
 typedef void (*gatt_disconnect_cb_t)(void);
 void gattserver_register_disconnect_cb(gatt_disconnect_cb_t cb);
@@ -101,6 +107,8 @@ gatt_param_handle_t gattserver_register_string_to_service(
     const gatt_uuid_t uuid, gatt_chr_flags_t flags, const char *init_value);
 
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
+esp_err_t gattserver_register_write_status_cb(
+    gatt_param_handle_t handle, gatt_write_status_cb_t cb);
 esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb);
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void *value, size_t len);
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value);
