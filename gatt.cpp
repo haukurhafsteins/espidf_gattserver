@@ -13,6 +13,7 @@ extern "C" {
 #include "services/ans/ble_svc_ans.h"
 #include "gattserver.h"
 #include "gattserver_priv.h"
+#include "gattserver_service_change.hpp"
 
 static const ble_uuid128_t gatt_svr_svc_uuid =
 BLE_UUID128_INIT(0x2d, 0x71, 0xa2, 0x59, 0xb4, 0x58, 0xc8, 0x12,
@@ -68,6 +69,7 @@ static gatt_param_t gatt_params[GATT_MAX_PARAMS];
 static int gatt_param_count = 0;
 static struct ble_gatt_svc_def gatt_svr_svcs[GATT_MAX_SERVICES + 1];
 static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
+static GattServiceChangeState g_service_change;
 
 static gatt_param_t* gatt_find_param_by_handle(uint16_t attr_handle)
 {
@@ -358,6 +360,32 @@ bool gatt_is_notify_subscribed(gatt_param_handle_t handle)
            handle->subscribed_conn_handle != BLE_HS_CONN_HANDLE_NONE;
 }
 
+esp_err_t gatt_schedule_service_changed(
+    uint16_t start_handle, uint16_t end_handle)
+{
+    if (start_handle == 0 || end_handle == 0 || start_handle > end_handle)
+        return ESP_ERR_INVALID_ARG;
+    return g_service_change.schedule(start_handle, end_handle)
+        ? ESP_OK
+        : ESP_ERR_INVALID_STATE;
+}
+
+bool gatt_service_changed_applied(void)
+{
+    return g_service_change.applied();
+}
+
+void gatt_apply_scheduled_service_change(void)
+{
+    uint16_t start_handle = 0;
+    uint16_t end_handle = 0;
+    if (!g_service_change.pending(start_handle, end_handle))
+        return;
+
+    ble_svc_gatt_changed(start_handle, end_handle);
+    g_service_change.markApplied();
+}
+
 void gatt_update_subscription_state(uint16_t conn_handle, uint16_t attr_handle,
     bool notify_enabled, bool indicate_enabled)
 {
@@ -496,6 +524,7 @@ void gatt_svr_deinit(void)
 {
     ble_svc_gatt_deinit();
     ble_svc_gap_deinit();
+    g_service_change.reset();
 }
 
 #endif // CONFIG_BT_ENABLED

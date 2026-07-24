@@ -12,6 +12,10 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     gatt_param_type_t type, ble_gatt_chr_flags flags, const void* init_value, size_t value_size);
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len);
 bool gatt_is_notify_subscribed(gatt_param_handle_t handle);
+esp_err_t gatt_schedule_service_changed(
+    uint16_t start_handle, uint16_t end_handle);
+bool gatt_service_changed_applied(void);
+void gatt_apply_scheduled_service_change(void);
 esp_err_t gatt_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
 esp_err_t gatt_register_write_status_cb(
     gatt_param_handle_t handle, gatt_write_status_cb_t cb);

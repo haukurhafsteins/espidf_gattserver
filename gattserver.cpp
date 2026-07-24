@@ -155,6 +155,17 @@ bool gattserver_is_notify_subscribed(gatt_param_handle_t handle)
     return gatt_is_notify_subscribed(handle);
 }
 
+esp_err_t gattserver_schedule_service_changed(
+    uint16_t start_handle, uint16_t end_handle)
+{
+    return gatt_schedule_service_changed(start_handle, end_handle);
+}
+
+bool gattserver_service_changed_applied(void)
+{
+    return gatt_service_changed_applied();
+}
+
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value) { return gattserver_notify(handle, &value, sizeof(int32_t));}
 esp_err_t gattserver_notify_uint32(gatt_param_handle_t handle, uint32_t value) { return gattserver_notify(handle, &value, sizeof(uint32_t));}
 esp_err_t gattserver_notify_int8(gatt_param_handle_t handle, int8_t value) { return gattserver_notify(handle, &value, sizeof(int8_t));}

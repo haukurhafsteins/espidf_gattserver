@@ -22,6 +22,12 @@ static_assert(std::is_same_v<decltype(&statusWrite), gatt_write_status_cb_t>);
 static_assert(std::is_same_v<
               decltype(&gattserver_register_write_status_cb),
               esp_err_t (*)(gatt_param_handle_t, gatt_write_status_cb_t)>);
+static_assert(std::is_same_v<
+              decltype(&gattserver_schedule_service_changed),
+              esp_err_t (*)(uint16_t, uint16_t)>);
+static_assert(std::is_same_v<
+              decltype(&gattserver_service_changed_applied),
+              bool (*)(void)>);
 
 int main()
 {

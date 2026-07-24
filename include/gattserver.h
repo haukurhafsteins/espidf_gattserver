@@ -128,6 +128,13 @@ bool gattserver_is_notify_subscribed(gatt_param_handle_t handle);
 uint16_t gattserver_get_att_mtu(void);
 bool gattserver_is_link_encrypted(void);
 
+// Schedule one standard GATT Service Changed indication before the host starts.
+// The range is applied from the NimBLE sync callback after bond-store setup and
+// before advertising. Only one range can be scheduled per server lifetime.
+esp_err_t gattserver_schedule_service_changed(
+    uint16_t start_handle, uint16_t end_handle);
+bool gattserver_service_changed_applied(void);
+
 void gattserver_start(const char *name);
 void gattserver_set_name(const char *name);
 void gattserver_stop();

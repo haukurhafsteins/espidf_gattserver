@@ -76,6 +76,7 @@ void gap_bleprph_on_sync(void)
     MODLOG_DFLT(INFO, "Device Address: ");
     print_addr(addr_val);
     MODLOG_DFLT(INFO, "\n");
+    gatt_apply_scheduled_service_change();
     /* Begin advertising. */
 #if CONFIG_EXAMPLE_EXTENDED_ADV
     ext_bleprph_advertise();
