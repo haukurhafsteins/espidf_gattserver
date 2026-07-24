@@ -110,6 +110,10 @@ esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb
 esp_err_t gattserver_register_write_status_cb(
     gatt_param_handle_t handle, gatt_write_status_cb_t cb);
 esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb);
+// Replace the readable value without notifying. The new length may be smaller
+// than the capacity supplied when the characteristic was registered.
+esp_err_t gattserver_set_value(
+    gatt_param_handle_t handle, const void *value, size_t len);
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void *value, size_t len);
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value);
 esp_err_t gattserver_notify_int8(gatt_param_handle_t handle, int8_t value);

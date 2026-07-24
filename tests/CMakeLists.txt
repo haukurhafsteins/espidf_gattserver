@@ -23,3 +23,9 @@ target_compile_features(gatt_service_change_test PRIVATE cxx_std_17)
 target_include_directories(gatt_service_change_test PRIVATE ..)
 
 add_test(NAME gatt_service_change_test COMMAND gatt_service_change_test)
+
+add_executable(gatt_value_storage_test value_storage_test.cpp)
+target_compile_features(gatt_value_storage_test PRIVATE cxx_std_17)
+target_include_directories(gatt_value_storage_test PRIVATE ..)
+
+add_test(NAME gatt_value_storage_test COMMAND gatt_value_storage_test)

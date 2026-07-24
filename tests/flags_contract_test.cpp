@@ -28,6 +28,9 @@ static_assert(std::is_same_v<
 static_assert(std::is_same_v<
               decltype(&gattserver_service_changed_applied),
               bool (*)(void)>);
+static_assert(std::is_same_v<
+              decltype(&gattserver_set_value),
+              esp_err_t (*)(gatt_param_handle_t, const void *, size_t)>);
 
 int main()
 {

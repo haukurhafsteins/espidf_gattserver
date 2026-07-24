@@ -14,6 +14,7 @@ extern "C" {
 #include "gattserver.h"
 #include "gattserver_priv.h"
 #include "gattserver_service_change.hpp"
+#include "gattserver_value_storage.hpp"
 
 static const ble_uuid128_t gatt_svr_svc_uuid =
 BLE_UUID128_INIT(0x2d, 0x71, 0xa2, 0x59, 0xb4, 0x58, 0xc8, 0x12,
@@ -332,11 +333,9 @@ gatt_service_handle_t gatt_register_service(const ble_uuid_any_t uuid)
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len)
 {
     int rc;
-    if (!handle || len > handle->value_maxlen) 
-        return ESP_ERR_INVALID_ARG;
-
-    memcpy(handle->value_buf, new_value, len);
-    handle->value_len = len;
+    const auto setResult = gatt_set_value(handle, new_value, len);
+    if (setResult != ESP_OK)
+        return setResult;
     
     if (!handle->notify_subscribed || handle->subscribed_conn_handle == BLE_HS_CONN_HANDLE_NONE)
     {
@@ -349,6 +348,21 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
         return ESP_FAIL;
     }
     return ESP_OK;
+}
+
+esp_err_t gatt_set_value(
+    gatt_param_handle_t handle, const void *new_value, size_t len)
+{
+    if (!handle)
+        return ESP_ERR_INVALID_ARG;
+    return gatt_store_value(
+        handle->value_buf,
+        handle->value_maxlen,
+        handle->value_len,
+        new_value,
+        len)
+        ? ESP_OK
+        : ESP_ERR_INVALID_ARG;
 }
 
 bool gatt_is_notify_subscribed(gatt_param_handle_t handle)

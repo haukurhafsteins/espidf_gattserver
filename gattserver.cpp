@@ -150,6 +150,12 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, s
     return gatt_notify(handle, new_value, len);
 }
 
+esp_err_t gattserver_set_value(
+    gatt_param_handle_t handle, const void *new_value, size_t len)
+{
+    return gatt_set_value(handle, new_value, len);
+}
+
 bool gattserver_is_notify_subscribed(gatt_param_handle_t handle)
 {
     return gatt_is_notify_subscribed(handle);
