@@ -11,6 +11,8 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
     gatt_service_handle_t service, const ble_uuid_any_t uuid,
     gatt_param_type_t type, ble_gatt_chr_flags flags, const void* init_value, size_t value_size);
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len);
+esp_err_t gatt_notify_custom(
+    gatt_param_handle_t handle, const void *value, size_t len);
 esp_err_t gatt_set_value(
     gatt_param_handle_t handle, const void *new_value, size_t len);
 bool gatt_is_notify_subscribed(gatt_param_handle_t handle);

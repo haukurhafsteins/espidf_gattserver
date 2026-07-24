@@ -350,6 +350,39 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
     return ESP_OK;
 }
 
+esp_err_t gatt_notify_custom(
+    gatt_param_handle_t handle, const void *value, size_t len)
+{
+    if (!handle || (len != 0 && value == nullptr) || len > UINT16_MAX)
+        return ESP_ERR_INVALID_ARG;
+
+    if (!handle->notify_subscribed ||
+        handle->subscribed_conn_handle == BLE_HS_CONN_HANDLE_NONE)
+    {
+        return ESP_OK;
+    }
+
+    struct os_mbuf *payload =
+        ble_hs_mbuf_from_flat(value, static_cast<uint16_t>(len));
+    if (payload == nullptr)
+        return ESP_ERR_NO_MEM;
+
+    const int rc = ble_gatts_notify_custom(
+        handle->subscribed_conn_handle, handle->handle, payload);
+    if (rc != 0 && rc != BLE_HS_ENOTCONN)
+    {
+        printf(
+            "\x1b[31m"
+            "Error custom-notifying characteristic for %X: %d, handle %d\n"
+            "\x1b[0m",
+            handle->uuid.u16.value,
+            rc,
+            handle->handle);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
 esp_err_t gatt_set_value(
     gatt_param_handle_t handle, const void *new_value, size_t len)
 {
