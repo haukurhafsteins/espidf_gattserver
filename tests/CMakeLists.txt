@@ -3,6 +3,14 @@ project(espidf_gattserver_contract_tests LANGUAGES CXX)
 
 enable_testing()
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(
+    NAME gatt_custom_notify_contract_test
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/custom_notify_contract_test.py"
+)
+
 add_executable(gatt_flags_contract_test flags_contract_test.cpp)
 target_compile_features(gatt_flags_contract_test PRIVATE cxx_std_17)
 target_include_directories(gatt_flags_contract_test PRIVATE
