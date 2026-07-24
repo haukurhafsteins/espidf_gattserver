@@ -11,3 +11,9 @@ target_include_directories(gatt_flags_contract_test PRIVATE
 )
 
 add_test(NAME gatt_flags_contract_test COMMAND gatt_flags_contract_test)
+
+add_executable(gatt_connection_state_test connection_state_test.cpp)
+target_compile_features(gatt_connection_state_test PRIVATE cxx_std_17)
+target_include_directories(gatt_connection_state_test PRIVATE ..)
+
+add_test(NAME gatt_connection_state_test COMMAND gatt_connection_state_test)

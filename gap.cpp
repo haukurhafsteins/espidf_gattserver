@@ -7,6 +7,7 @@
 
 #include "gattserver_priv.h"
 #include "gattserver.h"
+#include "gattserver_connection_state.hpp"
 
 static const char *TAG = "GAP";
 
@@ -14,7 +15,10 @@ static uint8_t own_addr_type;
 uint16_t g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 gatt_disconnect_cb_t g_disconnect_cb = nullptr;
 static uint8_t g_last_disconnect_reason = 0;
+static GattConnectionState g_connection_state;
 uint8_t gattserver_get_last_disconnect_reason(void) { return g_last_disconnect_reason; }
+uint16_t gattserver_get_att_mtu(void) { return g_connection_state.mtu(); }
+bool gattserver_is_link_encrypted(void) { return g_connection_state.encrypted(); }
 
 void gattserver_set_fast_conn(bool fast)
 {
@@ -117,6 +121,7 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
         else
         {
             g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+            g_connection_state.reset();
         }
         /* A new connection was established or a connection attempt failed. */
         MODLOG_DFLT(INFO, "connection %s; status=%d ",
@@ -126,6 +131,9 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
         {
             rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
             assert(rc == 0);
+            g_connection_state.connected(
+                event->connect.conn_handle,
+                desc.sec_state.encrypted != 0);
             bleprph_print_conn_desc(&desc);
         }
         MODLOG_DFLT(INFO, "\n");
@@ -149,6 +157,7 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_DISCONNECT:
         gatt_clear_subscription_state(event->disconnect.conn.conn_handle);
+        g_connection_state.disconnected(event->disconnect.conn.conn_handle);
         g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
         g_last_disconnect_reason = event->disconnect.reason;
         if (g_disconnect_cb) g_disconnect_cb(); // e.g. firmware turns the LED off
@@ -190,6 +199,9 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
                     event->enc_change.status);
         rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
         assert(rc == 0);
+        g_connection_state.encryptionChanged(
+            event->enc_change.conn_handle,
+            event->enc_change.status == 0 && desc.sec_state.encrypted != 0);
         bleprph_print_conn_desc(&desc);
         MODLOG_DFLT(INFO, "\n");
         break;
@@ -221,6 +233,9 @@ int gap_bleprph_event_cb(struct ble_gap_event *event, void *arg)
         break;
 
     case BLE_GAP_EVENT_MTU:
+        g_connection_state.mtuChanged(
+            event->mtu.conn_handle,
+            event->mtu.value);
         MODLOG_DFLT(INFO, "mtu update event; conn_handle=%d cid=%d mtu=%d\n",
                     event->mtu.conn_handle,
                     event->mtu.channel_id,

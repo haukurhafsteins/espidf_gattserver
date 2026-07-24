@@ -123,6 +123,11 @@ esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float value);
 // payload nobody is subscribed to receive.
 bool gattserver_is_notify_subscribed(gatt_param_handle_t handle);
 
+// Current link state for low-priority notification producers. Returns ATT's
+// default MTU (23) and false whenever no peer is connected.
+uint16_t gattserver_get_att_mtu(void);
+bool gattserver_is_link_encrypted(void);
+
 void gattserver_start(const char *name);
 void gattserver_set_name(const char *name);
 void gattserver_stop();
