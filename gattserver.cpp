@@ -46,13 +46,13 @@ static_assert(GATT_CHR_PROP_INDICATE == BLE_GATT_CHR_PROP_INDICATE);
 static_assert(GATT_CHR_F_READ_ENC == BLE_GATT_CHR_F_READ_ENC);
 static_assert(GATT_CHR_F_WRITE_ENC == BLE_GATT_CHR_F_WRITE_ENC);
 static_assert(sizeof(gatt_chr_flags_t) == sizeof(ble_gatt_chr_flags));
+static_assert(GATT_WRITE_OK == 0);
+static_assert(GATT_WRITE_ERR_UNLIKELY == BLE_ATT_ERR_UNLIKELY);
+static_assert(GATT_WRITE_ERR_INSUFFICIENT_RESOURCES == BLE_ATT_ERR_INSUFFICIENT_RES);
 
 extern "C" void ble_store_config_init(void);
 
 typedef gatt_service_t* gatt_service_handle_t;
-
-typedef void (*gatt_write_cb_t)(gatt_param_handle_t handle, void* value, size_t len);
-
 
 void bleprph_host_task(void *param)
 {
@@ -126,6 +126,12 @@ gatt_param_handle_t gattserver_register_string_to_service(
 esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb) 
 {
     return gatt_register_write_cb(handle, cb);
+}
+
+esp_err_t gattserver_register_write_status_cb(
+    gatt_param_handle_t handle, gatt_write_status_cb_t cb)
+{
+    return gatt_register_write_status_cb(handle, cb);
 }
 
 esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb)

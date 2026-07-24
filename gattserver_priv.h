@@ -13,6 +13,8 @@ gatt_param_handle_t gatt_register_characteristics_to_service(
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len);
 bool gatt_is_notify_subscribed(gatt_param_handle_t handle);
 esp_err_t gatt_register_write_cb(gatt_param_handle_t handle, gatt_write_cb_t cb);
+esp_err_t gatt_register_write_status_cb(
+    gatt_param_handle_t handle, gatt_write_status_cb_t cb);
 esp_err_t gatt_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb);
 void gatt_update_subscription_state(uint16_t conn_handle, uint16_t attr_handle,
     bool notify_enabled, bool indicate_enabled);
