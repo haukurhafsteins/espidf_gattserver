@@ -110,7 +110,14 @@ esp_err_t gattserver_register_write_cb(gatt_param_handle_t handle, gatt_write_cb
 esp_err_t gattserver_register_write_status_cb(
     gatt_param_handle_t handle, gatt_write_status_cb_t cb);
 esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t cb);
+// Replace the readable value without notifying. The new length may be smaller
+// than the capacity supplied when the characteristic was registered.
+esp_err_t gattserver_set_value(
+    gatt_param_handle_t handle, const void *value, size_t len);
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void *value, size_t len);
+// Notify with an explicit payload without changing the readable value.
+esp_err_t gattserver_notify_custom(
+    gatt_param_handle_t handle, const void *value, size_t len);
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value);
 esp_err_t gattserver_notify_int8(gatt_param_handle_t handle, int8_t value);
 esp_err_t gattserver_notify_uint8(gatt_param_handle_t handle, uint8_t value);
@@ -122,6 +129,18 @@ esp_err_t gattserver_notify_float(gatt_param_handle_t handle, float value);
 // connected (i.e. a notify would actually be sent). Use to skip generating a
 // payload nobody is subscribed to receive.
 bool gattserver_is_notify_subscribed(gatt_param_handle_t handle);
+
+// Current link state for low-priority notification producers. Returns ATT's
+// default MTU (23) and false whenever no peer is connected.
+uint16_t gattserver_get_att_mtu(void);
+bool gattserver_is_link_encrypted(void);
+
+// Schedule one standard GATT Service Changed indication before the host starts.
+// The range is applied from the NimBLE sync callback after bond-store setup and
+// before advertising. Only one range can be scheduled per server lifetime.
+esp_err_t gattserver_schedule_service_changed(
+    uint16_t start_handle, uint16_t end_handle);
+bool gattserver_service_changed_applied(void);
 
 void gattserver_start(const char *name);
 void gattserver_set_name(const char *name);

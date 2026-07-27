@@ -13,6 +13,8 @@ extern "C" {
 #include "services/ans/ble_svc_ans.h"
 #include "gattserver.h"
 #include "gattserver_priv.h"
+#include "gattserver_service_change.hpp"
+#include "gattserver_value_storage.hpp"
 
 static const ble_uuid128_t gatt_svr_svc_uuid =
 BLE_UUID128_INIT(0x2d, 0x71, 0xa2, 0x59, 0xb4, 0x58, 0xc8, 0x12,
@@ -68,6 +70,7 @@ static gatt_param_t gatt_params[GATT_MAX_PARAMS];
 static int gatt_param_count = 0;
 static struct ble_gatt_svc_def gatt_svr_svcs[GATT_MAX_SERVICES + 1];
 static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
+static GattServiceChangeState g_service_change;
 
 static gatt_param_t* gatt_find_param_by_handle(uint16_t attr_handle)
 {
@@ -330,11 +333,9 @@ gatt_service_handle_t gatt_register_service(const ble_uuid_any_t uuid)
 esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t len)
 {
     int rc;
-    if (!handle || len > handle->value_maxlen) 
-        return ESP_ERR_INVALID_ARG;
-
-    memcpy(handle->value_buf, new_value, len);
-    handle->value_len = len;
+    const auto setResult = gatt_set_value(handle, new_value, len);
+    if (setResult != ESP_OK)
+        return setResult;
     
     if (!handle->notify_subscribed || handle->subscribed_conn_handle == BLE_HS_CONN_HANDLE_NONE)
     {
@@ -349,6 +350,54 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
     return ESP_OK;
 }
 
+esp_err_t gatt_notify_custom(
+    gatt_param_handle_t handle, const void *value, size_t len)
+{
+    if (!handle || (len != 0 && value == nullptr) || len > UINT16_MAX)
+        return ESP_ERR_INVALID_ARG;
+
+    if (!handle->notify_subscribed ||
+        handle->subscribed_conn_handle == BLE_HS_CONN_HANDLE_NONE)
+    {
+        return ESP_OK;
+    }
+
+    struct os_mbuf *payload =
+        ble_hs_mbuf_from_flat(value, static_cast<uint16_t>(len));
+    if (payload == nullptr)
+        return ESP_ERR_NO_MEM;
+
+    const int rc = ble_gatts_notify_custom(
+        handle->subscribed_conn_handle, handle->handle, payload);
+    if (rc != 0 && rc != BLE_HS_ENOTCONN)
+    {
+        printf(
+            "\x1b[31m"
+            "Error custom-notifying characteristic for %X: %d, handle %d\n"
+            "\x1b[0m",
+            handle->uuid.u16.value,
+            rc,
+            handle->handle);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t gatt_set_value(
+    gatt_param_handle_t handle, const void *new_value, size_t len)
+{
+    if (!handle)
+        return ESP_ERR_INVALID_ARG;
+    return gatt_store_value(
+        handle->value_buf,
+        handle->value_maxlen,
+        handle->value_len,
+        new_value,
+        len)
+        ? ESP_OK
+        : ESP_ERR_INVALID_ARG;
+}
+
 bool gatt_is_notify_subscribed(gatt_param_handle_t handle)
 {
     // Mirrors the gate in gatt_notify(): "subscribed" means a peer has enabled
@@ -356,6 +405,32 @@ bool gatt_is_notify_subscribed(gatt_param_handle_t handle)
     // out. Lets callers skip expensive payload generation when nobody listens.
     return handle && handle->notify_subscribed &&
            handle->subscribed_conn_handle != BLE_HS_CONN_HANDLE_NONE;
+}
+
+esp_err_t gatt_schedule_service_changed(
+    uint16_t start_handle, uint16_t end_handle)
+{
+    if (start_handle == 0 || end_handle == 0 || start_handle > end_handle)
+        return ESP_ERR_INVALID_ARG;
+    return g_service_change.schedule(start_handle, end_handle)
+        ? ESP_OK
+        : ESP_ERR_INVALID_STATE;
+}
+
+bool gatt_service_changed_applied(void)
+{
+    return g_service_change.applied();
+}
+
+void gatt_apply_scheduled_service_change(void)
+{
+    uint16_t start_handle = 0;
+    uint16_t end_handle = 0;
+    if (!g_service_change.pending(start_handle, end_handle))
+        return;
+
+    ble_svc_gatt_changed(start_handle, end_handle);
+    g_service_change.markApplied();
 }
 
 void gatt_update_subscription_state(uint16_t conn_handle, uint16_t attr_handle,
@@ -496,6 +571,7 @@ void gatt_svr_deinit(void)
 {
     ble_svc_gatt_deinit();
     ble_svc_gap_deinit();
+    g_service_change.reset();
 }
 
 #endif // CONFIG_BT_ENABLED

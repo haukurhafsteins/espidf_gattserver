@@ -150,9 +150,32 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, s
     return gatt_notify(handle, new_value, len);
 }
 
+esp_err_t gattserver_notify_custom(
+    gatt_param_handle_t handle, const void *value, size_t len)
+{
+    return gatt_notify_custom(handle, value, len);
+}
+
+esp_err_t gattserver_set_value(
+    gatt_param_handle_t handle, const void *new_value, size_t len)
+{
+    return gatt_set_value(handle, new_value, len);
+}
+
 bool gattserver_is_notify_subscribed(gatt_param_handle_t handle)
 {
     return gatt_is_notify_subscribed(handle);
+}
+
+esp_err_t gattserver_schedule_service_changed(
+    uint16_t start_handle, uint16_t end_handle)
+{
+    return gatt_schedule_service_changed(start_handle, end_handle);
+}
+
+bool gattserver_service_changed_applied(void)
+{
+    return gatt_service_changed_applied();
 }
 
 esp_err_t gattserver_notify_int32(gatt_param_handle_t handle, int32_t value) { return gattserver_notify(handle, &value, sizeof(int32_t));}
