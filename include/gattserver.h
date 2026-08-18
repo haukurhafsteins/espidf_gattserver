@@ -146,6 +146,14 @@ void gattserver_start(const char *name);
 void gattserver_set_name(const char *name);
 void gattserver_stop();
 
+// True once host-controller synchronization has completed after
+// gattserver_start(): the stack is up and host procedures may begin. This
+// is a raw passthrough of the backend's sync state (NimBLE: ble_hs_synced),
+// so it says nothing about identity setup or advertising, which the sync
+// callback performs afterwards. Query only while the server is started;
+// behavior after gattserver_stop() is backend-defined.
+bool gattserver_synced(void);
+
 // Request connection parameters on the active link. fast=true asks for a short
 // (~15-30 ms) interval for high-throughput transfers like firmware OTA; fast=false
 // restores the power-saving interval. No-op if nothing is connected. The central

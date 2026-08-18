@@ -242,4 +242,8 @@ void gattserver_stop() {
     nimble_port_stop();
     nimble_port_deinit();
 }
+
+bool gattserver_synced(void) {
+    return ble_hs_synced() != 0;
+}
 #endif // CONFIG_BT_ENABLED
