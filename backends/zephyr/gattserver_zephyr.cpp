@@ -753,6 +753,11 @@ bool gattserver_is_notify_subscribed(gatt_param_handle_t handle)
     return subscribed;
 }
 
+int gattserver_get_available_notify_buffers(void)
+{
+    return 0;
+}
+
 uint16_t gattserver_get_att_mtu(void)
 {
     bt_conn *connection = active_connection_ref();

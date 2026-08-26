@@ -6,6 +6,7 @@
 #include "host/ble_att.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
+#include "os/os_mbuf.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include "services/ans/ble_svc_ans.h"
@@ -165,6 +166,11 @@ esp_err_t gattserver_set_value(
 bool gattserver_is_notify_subscribed(gatt_param_handle_t handle)
 {
     return gatt_is_notify_subscribed(handle);
+}
+
+int gattserver_get_available_notify_buffers(void)
+{
+    return os_msys_num_free();
 }
 
 esp_err_t gattserver_schedule_service_changed(

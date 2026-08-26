@@ -16,6 +16,12 @@ add_test(
         "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/zephyr_backend_contract_test.py"
 )
+add_test(
+    NAME gatt_notify_buffer_contract_test
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/notify_buffer_contract_test.py"
+)
 
 add_executable(gatt_flags_contract_test flags_contract_test.cpp)
 target_compile_features(gatt_flags_contract_test PRIVATE cxx_std_17)
