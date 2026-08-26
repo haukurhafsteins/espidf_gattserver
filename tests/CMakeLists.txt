@@ -10,6 +10,12 @@ add_test(
         "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/custom_notify_contract_test.py"
 )
+add_test(
+    NAME gatt_zephyr_backend_contract_test
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/zephyr_backend_contract_test.py"
+)
 
 add_executable(gatt_flags_contract_test flags_contract_test.cpp)
 target_compile_features(gatt_flags_contract_test PRIVATE cxx_std_17)
@@ -47,3 +53,23 @@ target_include_directories(gatt_zephyr_table_builder_test PRIVATE
 )
 
 add_test(NAME gatt_zephyr_table_builder_test COMMAND gatt_zephyr_table_builder_test)
+
+add_executable(
+    gatt_zephyr_write_assembler_test
+    zephyr_write_assembler_test.cpp
+    ../backends/zephyr/gatt_write_assembler.cpp
+)
+target_compile_features(gatt_zephyr_write_assembler_test PRIVATE cxx_std_17)
+target_include_directories(gatt_zephyr_write_assembler_test PRIVATE
+    ../backends/zephyr
+)
+
+add_test(NAME gatt_zephyr_write_assembler_test COMMAND gatt_zephyr_write_assembler_test)
+
+add_executable(gatt_zephyr_value_arena_test zephyr_value_arena_test.cpp)
+target_compile_features(gatt_zephyr_value_arena_test PRIVATE cxx_std_17)
+target_include_directories(gatt_zephyr_value_arena_test PRIVATE
+    ../backends/zephyr
+)
+
+add_test(NAME gatt_zephyr_value_arena_test COMMAND gatt_zephyr_value_arena_test)

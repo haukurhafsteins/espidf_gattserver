@@ -9,6 +9,7 @@ using gattserver::zephyr::CharacteristicLayout;
 using gattserver::zephyr::build_characteristic_layout;
 using gattserver::zephyr::is_supported_uuid;
 using gattserver::zephyr::service_attribute_count;
+using gattserver::zephyr::uuid128_value_bytes;
 
 int main()
 {
@@ -24,7 +25,9 @@ int main()
         GATT_CHR_PROP_WRITE | GATT_CHR_PROP_WRITE_NO_RSP);
     assert(writable.properties ==
            (GATT_CHR_PROP_WRITE | GATT_CHR_PROP_WRITE_NO_RSP));
-    assert(writable.permissions == gattserver::zephyr::kPermissionWrite);
+    assert(writable.permissions ==
+           (gattserver::zephyr::kPermissionWrite |
+            gattserver::zephyr::kPermissionPrepareWrite));
     assert(!writable.has_ccc);
     assert(writable.attribute_count == 2);
 
@@ -39,7 +42,8 @@ int main()
         GATT_CHR_F_READ_ENC | GATT_CHR_F_WRITE_ENC);
     assert(encrypted.permissions ==
            (gattserver::zephyr::kPermissionRead |
-            gattserver::zephyr::kPermissionWrite));
+            gattserver::zephyr::kPermissionWrite |
+            gattserver::zephyr::kPermissionPrepareWrite));
     assert(encrypted.encryption_deferred);
 
     constexpr std::array<gatt_chr_flags_t, 3> flags = {
@@ -59,6 +63,17 @@ int main()
     assert(is_supported_uuid(uuid16));
     assert(is_supported_uuid(uuid128));
     assert(!is_supported_uuid(invalid));
+
+    // gatt_uuid_t stores 128-bit UUIDs least-significant byte first, just
+    // like NimBLE and Zephyr. The device-log UUID must cross unchanged.
+    const gatt_uuid_t device_log_uuid = GATT_UUID128(
+        {0x21, 0xb7, 0x10, 0x3d, 0x30, 0xca, 0xef, 0x87,
+         0x4a, 0x40, 0xb7, 0xcb, 0xbe, 0x71, 0x23, 0x9f});
+    constexpr std::array<uint8_t, 16> expected_device_log_bytes = {
+        0x21, 0xb7, 0x10, 0x3d, 0x30, 0xca, 0xef, 0x87,
+        0x4a, 0x40, 0xb7, 0xcb, 0xbe, 0x71, 0x23, 0x9f,
+    };
+    assert(uuid128_value_bytes(device_log_uuid) == expected_device_log_bytes);
 
     return 0;
 }

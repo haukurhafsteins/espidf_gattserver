@@ -16,6 +16,8 @@
 #include <zephyr/sys/util.h>
 
 #include "gatt_table_builder.hpp"
+#include "gatt_value_arena.hpp"
+#include "gatt_write_assembler.hpp"
 #include "gattserver_value_storage.hpp"
 
 LOG_MODULE_REGISTER(gattserver, LOG_LEVEL_INF);
@@ -29,6 +31,10 @@ static_assert(GATT_CHR_PROP_INDICATE == BT_GATT_CHRC_INDICATE);
 static_assert(gattserver::zephyr::kPermissionNone == BT_GATT_PERM_NONE);
 static_assert(gattserver::zephyr::kPermissionRead == BT_GATT_PERM_READ);
 static_assert(gattserver::zephyr::kPermissionWrite == BT_GATT_PERM_WRITE);
+static_assert(gattserver::zephyr::kPermissionPrepareWrite ==
+              BT_GATT_PERM_PREPARE_WRITE);
+static_assert(CONFIG_BT_ATT_PREPARE_COUNT >= 4,
+              "gattserver long writes require four prepare buffers");
 static_assert(GATT_WRITE_ERR_UNLIKELY == BT_ATT_ERR_UNLIKELY);
 static_assert(
     GATT_WRITE_ERR_INSUFFICIENT_RESOURCES == BT_ATT_ERR_INSUFFICIENT_RESOURCES);
@@ -37,7 +43,7 @@ namespace
 {
 
 constexpr size_t kMaxAttributes = GATT_MAX_SERVICES + 3 * GATT_MAX_PARAMS;
-constexpr size_t kMaxNameLength = 63;
+constexpr size_t kMaxNameLength = 19;
 
 union ZephyrUuid
 {
@@ -56,9 +62,8 @@ const bt_uuid *copy_uuid(ZephyrUuid &destination, const gatt_uuid_t &source)
     }
 
     destination.uuid128.uuid.type = BT_UUID_TYPE_128;
-    memcpy(destination.uuid128.val,
-           source.value.u128,
-           sizeof(destination.uuid128.val));
+    const auto bytes = gattserver::zephyr::uuid128_value_bytes(source);
+    memcpy(destination.uuid128.val, bytes.data(), bytes.size());
     return &destination.uuid128.uuid;
 }
 
@@ -93,6 +98,8 @@ struct gatt_param_t
     bt_gatt_chrc characteristic{};
     _bt_gatt_ccc ccc{};
     bt_gatt_attr *value_attr = nullptr;
+    k_work write_callback_work{};
+    bool write_callback_initialized = false;
 };
 
 namespace
@@ -113,6 +120,10 @@ bool g_advertising = false;
 uint8_t g_last_disconnect_reason = 0;
 gatt_disconnect_cb_t g_disconnect_cb = nullptr;
 bt_conn *g_connection = nullptr;
+alignas(std::max_align_t)
+uint8_t g_value_storage[CONFIG_GATTSERVER_VALUE_ARENA_BYTES]{};
+gattserver::zephyr::ValueArena g_value_arena(
+    g_value_storage, sizeof(g_value_storage));
 
 K_MUTEX_DEFINE(g_connection_mutex);
 
@@ -140,29 +151,71 @@ ssize_t read_value(bt_conn *conn,
                              param->value_len);
 }
 
+void deferred_write_callback(k_work *work)
+{
+    auto *param = CONTAINER_OF(work, gatt_param_t, write_callback_work);
+    if (param->write_status_cb != nullptr)
+    {
+        const gatt_write_status_t status =
+            param->write_status_cb(param, param->value_buf, param->value_len);
+        if (status != GATT_WRITE_OK)
+        {
+            // Execute Write has already succeeded on air, so a deferred
+            // application rejection cannot be returned as an ATT error.
+            LOG_WRN("Deferred long-write callback rejected status 0x%02x",
+                    status);
+        }
+    }
+    else if (param->write_cb != nullptr)
+    {
+        param->write_cb(param, param->value_buf, param->value_len);
+    }
+}
+
 ssize_t write_value(bt_conn *,
                     const bt_gatt_attr *attr,
                     const void *buffer,
                     uint16_t length,
                     uint16_t offset,
-                    uint8_t)
+                    uint8_t flags)
 {
     auto *param = static_cast<gatt_param_t *>(attr->user_data);
     if (param == nullptr)
     {
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
     }
-    if (offset != 0)
+    const auto mode = (flags & BT_GATT_WRITE_FLAG_PREPARE) != 0
+                          ? gattserver::zephyr::WriteMode::prepare
+                      : (flags & BT_GATT_WRITE_FLAG_EXECUTE) != 0
+                          ? gattserver::zephyr::WriteMode::execute
+                          : gattserver::zephyr::WriteMode::plain;
+    const auto result = gattserver::zephyr::assemble_write(
+        param->value_buf,
+        param->value_capacity,
+        param->value_len,
+        buffer,
+        length,
+        offset,
+        mode);
+    if (!result.accepted())
     {
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+        return result.error == gattserver::zephyr::WriteError::invalid_offset
+                   ? BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET)
+                   : BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
-    if (!gatt_store_value(param->value_buf,
-                          param->value_capacity,
-                          param->value_len,
-                          buffer,
-                          length))
+
+    // Zephyr requires PREPARE validation callbacks to return zero. NCS 2.9.1
+    // then reassembles all queued fragments and calls us once with EXECUTE.
+    if (mode == gattserver::zephyr::WriteMode::prepare)
     {
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+        return 0;
+    }
+    if (result.callback_deferred)
+    {
+        // Re-submitting a queued work item is a no-op. This also coalesces
+        // execute chunks on Zephyr versions that do not reassemble first.
+        (void)k_work_submit(&param->write_callback_work);
+        return length;
     }
 
     if (param->write_status_cb != nullptr)
@@ -195,9 +248,13 @@ int start_advertising()
     }
 
     const uint8_t flags = BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR;
-    bt_data advertising_data[2]{};
-    advertising_data[0] = BT_DATA(BT_DATA_FLAGS, &flags, sizeof(flags));
-    size_t advertising_count = 1;
+    const uint8_t name_length = static_cast<uint8_t>(strlen(g_name));
+    const bt_data name_data =
+        BT_DATA(BT_DATA_NAME_COMPLETE, g_name, name_length);
+    bt_data advertising_data[3]{};
+    size_t advertising_count = 0;
+    advertising_data[advertising_count++] =
+        BT_DATA(BT_DATA_FLAGS, &flags, sizeof(flags));
 
     if (g_service_count > 0)
     {
@@ -205,22 +262,19 @@ int start_advertising()
         if (uuid->type == BT_UUID_TYPE_16)
         {
             const auto *uuid16 = BT_UUID_16(uuid);
-            advertising_data[1] = BT_DATA(
+            advertising_data[advertising_count++] = BT_DATA(
                 BT_DATA_UUID16_ALL, &uuid16->val, sizeof(uuid16->val));
-            advertising_count = 2;
         }
-        else if (uuid->type == BT_UUID_TYPE_128)
+        else if (uuid->type == BT_UUID_TYPE_128 && name_length <= 8)
         {
             const auto *uuid128 = BT_UUID_128(uuid);
-            advertising_data[1] = BT_DATA(
+            advertising_data[advertising_count++] = BT_DATA(
                 BT_DATA_UUID128_ALL, uuid128->val, sizeof(uuid128->val));
-            advertising_count = 2;
         }
     }
+    advertising_data[advertising_count++] = name_data;
 
-    const bt_data scan_response[] = {
-        BT_DATA(BT_DATA_NAME_COMPLETE, g_name, strlen(g_name)),
-    };
+    const bt_data scan_response[] = {name_data};
     const int result = bt_le_adv_start(BT_LE_ADV_CONN,
                                        advertising_data,
                                        advertising_count,
@@ -296,11 +350,15 @@ void reset_registration_state()
 {
     for (size_t i = 0; i < g_param_count; ++i)
     {
-        k_free(g_params[i].value_buf);
+        if (g_params[i].write_callback_initialized)
+            (void)k_work_cancel(&g_params[i].write_callback_work);
+        g_params[i] = {};
     }
-    memset(g_services, 0, sizeof(g_services));
-    memset(g_params, 0, sizeof(g_params));
-    memset(g_attributes, 0, sizeof(g_attributes));
+    for (auto &service : g_services)
+        service = {};
+    for (auto &attribute : g_attributes)
+        attribute = {};
+    g_value_arena.reset();
     g_service_count = 0;
     g_param_count = 0;
     g_attribute_count = 0;
@@ -475,9 +533,13 @@ gatt_param_handle_t gattserver_register_characteristics_to_service(
     uint8_t *storage = nullptr;
     if (value_size != 0)
     {
-        storage = static_cast<uint8_t *>(k_malloc(value_size));
+        storage = static_cast<uint8_t *>(g_value_arena.allocate(value_size));
         if (storage == nullptr)
         {
+            LOG_ERR("GATT value arena exhausted: request %u, used %u/%u",
+                    static_cast<unsigned>(value_size),
+                    static_cast<unsigned>(g_value_arena.used()),
+                    static_cast<unsigned>(g_value_arena.capacity()));
             return nullptr;
         }
         memcpy(storage, initial_value, value_size);
@@ -491,6 +553,8 @@ gatt_param_handle_t gattserver_register_characteristics_to_service(
     param.value_len = static_cast<uint16_t>(value_size);
     param.value_capacity = static_cast<uint16_t>(value_size);
     param.service = service;
+    k_work_init(&param.write_callback_work, deferred_write_callback);
+    param.write_callback_initialized = true;
     return &param;
 }
 

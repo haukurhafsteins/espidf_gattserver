@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -13,6 +14,7 @@ namespace gattserver::zephyr
 constexpr uint16_t kPermissionNone = 0;
 constexpr uint16_t kPermissionRead = 1u << 0;
 constexpr uint16_t kPermissionWrite = 1u << 1;
+constexpr uint16_t kPermissionPrepareWrite = 1u << 6;
 
 struct CharacteristicLayout
 {
@@ -43,7 +45,7 @@ constexpr CharacteristicLayout build_characteristic_layout(
     if ((properties &
          (GATT_CHR_PROP_WRITE | GATT_CHR_PROP_WRITE_NO_RSP)) != 0)
     {
-        permissions |= kPermissionWrite;
+        permissions |= kPermissionWrite | kPermissionPrepareWrite;
     }
 
     const bool has_ccc =
@@ -75,6 +77,15 @@ constexpr bool is_supported_uuid(const gatt_uuid_t &uuid)
 {
     return uuid.type == GATT_UUID_TYPE_16 ||
            uuid.type == GATT_UUID_TYPE_128;
+}
+
+constexpr std::array<uint8_t, 16> uuid128_value_bytes(
+    const gatt_uuid_t &uuid)
+{
+    std::array<uint8_t, 16> bytes{};
+    for (std::size_t i = 0; i < bytes.size(); ++i)
+        bytes[i] = uuid.value.u128[i];
+    return bytes;
 }
 
 } // namespace gattserver::zephyr

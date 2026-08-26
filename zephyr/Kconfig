@@ -11,3 +11,18 @@ menuconfig GATTSERVER
 	  Zephyr settings and rtos NVS have separate flash ownership, encrypted
 	  characteristic flags are registered with plain read/write permissions.
 	  Enforcing those flags is a Stage 4 design item.
+
+config BT_ATT_PREPARE_COUNT
+	default 4 if GATTSERVER
+	range 4 64 if GATTSERVER
+
+config GATTSERVER_VALUE_ARENA_BYTES
+	int "Static GATT characteristic value arena size"
+	depends on GATTSERVER
+	range 512 65536
+	default 8192
+	help
+	  Bytes reserved for characteristic initial values and writable storage.
+	  Registration fails with a clear log if the fixed arena is exhausted.
+	  The default covers the current URU product table, including the long
+	  set-start value, without depending on the consumer's heap setting.

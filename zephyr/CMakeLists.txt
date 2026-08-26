@@ -2,6 +2,7 @@ zephyr_library()
 zephyr_library_sources_ifdef(
     CONFIG_GATTSERVER
     ../backends/zephyr/gattserver_zephyr.cpp
+    ../backends/zephyr/gatt_write_assembler.cpp
 )
 zephyr_include_directories(
     ..
