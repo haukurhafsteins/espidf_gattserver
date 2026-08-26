@@ -1,0 +1,13 @@
+menuconfig GATTSERVER
+	bool "Portable GATT server"
+	depends on BT && BT_PERIPHERAL
+	select BT_GATT_SERVICE_CHANGED
+	select BT_GATT_DYNAMIC_DB
+	select BT_DEVICE_NAME_DYNAMIC
+	help
+	  Build the Zephyr backend for the stack-neutral gattserver API.
+
+	  Stage 2 deliberately does not enable Bluetooth SMP or settings. Until
+	  Zephyr settings and rtos NVS have separate flash ownership, encrypted
+	  characteristic flags are registered with plain read/write permissions.
+	  Enforcing those flags is a Stage 4 design item.

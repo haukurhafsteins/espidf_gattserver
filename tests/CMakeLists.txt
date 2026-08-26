@@ -37,3 +37,13 @@ target_compile_features(gatt_value_storage_test PRIVATE cxx_std_17)
 target_include_directories(gatt_value_storage_test PRIVATE ..)
 
 add_test(NAME gatt_value_storage_test COMMAND gatt_value_storage_test)
+
+add_executable(gatt_zephyr_table_builder_test zephyr_table_builder_test.cpp)
+target_compile_features(gatt_zephyr_table_builder_test PRIVATE cxx_std_17)
+target_include_directories(gatt_zephyr_table_builder_test PRIVATE
+    ..
+    ../include
+    stubs
+)
+
+add_test(NAME gatt_zephyr_table_builder_test COMMAND gatt_zephyr_table_builder_test)
