@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 namespace gattserver::zephyr
 {
@@ -31,7 +32,9 @@ public:
             return nullptr;
 
         used_ = offset + size;
-        return storage_ + offset;
+        void *allocation = storage_ + offset;
+        std::memset(allocation, 0, size);
+        return allocation;
     }
 
     void reset() noexcept

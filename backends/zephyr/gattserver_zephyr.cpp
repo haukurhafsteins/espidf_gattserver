@@ -524,8 +524,7 @@ gatt_param_handle_t gattserver_register_characteristics_to_service(
 {
     if (g_started || service == nullptr || g_param_count >= GATT_MAX_PARAMS ||
         !gattserver::zephyr::is_supported_uuid(uuid) ||
-        value_size > UINT16_MAX ||
-        (initial_value == nullptr && value_size != 0))
+        value_size > UINT16_MAX)
     {
         return nullptr;
     }
@@ -542,7 +541,8 @@ gatt_param_handle_t gattserver_register_characteristics_to_service(
                     static_cast<unsigned>(g_value_arena.capacity()));
             return nullptr;
         }
-        memcpy(storage, initial_value, value_size);
+        if (initial_value != nullptr)
+            memcpy(storage, initial_value, value_size);
     }
 
     auto &param = g_params[g_param_count++];

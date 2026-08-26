@@ -30,6 +30,16 @@ class ZephyrBackendContractTest(unittest.TestCase):
         self.assertNotIn("k_malloc", source)
         self.assertNotIn("k_free", source)
 
+    def test_null_initial_value_uses_zero_initialized_arena_storage(self) -> None:
+        source = (ROOT / "backends" / "zephyr" / "gattserver_zephyr.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn(
+            "(initial_value == nullptr && value_size != 0)", source
+        )
+        self.assertIn("if (initial_value != nullptr)", source)
+
     def test_complete_name_is_present_in_advertising_and_scan_response(self) -> None:
         source = (ROOT / "backends" / "zephyr" / "gattserver_zephyr.cpp").read_text(
             encoding="utf-8"
