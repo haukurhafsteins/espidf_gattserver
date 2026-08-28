@@ -26,6 +26,12 @@ target_include_directories(gatt_connection_state_test PRIVATE ..)
 
 add_test(NAME gatt_connection_state_test COMMAND gatt_connection_state_test)
 
+add_executable(gatt_notify_log_limiter_test notify_log_limiter_test.cpp)
+target_compile_features(gatt_notify_log_limiter_test PRIVATE cxx_std_17)
+target_include_directories(gatt_notify_log_limiter_test PRIVATE ..)
+
+add_test(NAME gatt_notify_log_limiter_test COMMAND gatt_notify_log_limiter_test)
+
 add_executable(gatt_service_change_test service_change_test.cpp)
 target_compile_features(gatt_service_change_test PRIVATE cxx_std_17)
 target_include_directories(gatt_service_change_test PRIVATE ..)

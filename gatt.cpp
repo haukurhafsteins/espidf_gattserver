@@ -11,10 +11,14 @@ extern "C" {
 #include "services/bas/ble_svc_bas.h"
 }
 #include "services/ans/ble_svc_ans.h"
+#include "rtos/Log.hpp"
 #include "gattserver.h"
 #include "gattserver_priv.h"
+#include "gatt_notify_log_limiter.hpp"
 #include "gattserver_service_change.hpp"
 #include "gattserver_value_storage.hpp"
+
+static constexpr const char* BLE = "BLE";
 
 static const ble_uuid128_t gatt_svr_svc_uuid =
 BLE_UUID128_INIT(0x2d, 0x71, 0xa2, 0x59, 0xb4, 0x58, 0xc8, 0x12,
@@ -71,6 +75,7 @@ static int gatt_param_count = 0;
 static struct ble_gatt_svc_def gatt_svr_svcs[GATT_MAX_SERVICES + 1];
 static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
 static GattServiceChangeState g_service_change;
+static GattNotifyLogLimiter g_notify_log_limiter;
 
 static gatt_param_t* gatt_find_param_by_handle(uint16_t attr_handle)
 {
@@ -344,7 +349,25 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
 
     rc = ble_gatts_notify(handle->subscribed_conn_handle, handle->handle);
     if (rc != 0 && rc != BLE_HS_ENOTCONN) {
-        printf("\x1b[31m" "Error notifying characteristic for %X: %d, handle %d\n" "\x1b[0m", handle->uuid.u16.value, rc, handle->handle);
+        switch (g_notify_log_limiter.recordFailure(
+                    handle->subscribed_conn_handle))
+        {
+        case GattNotifyLogLimiter::Decision::individual:
+            RTOS_LOGW(
+                BLE,
+                "Notify rc=%d uuid=%04X",
+                rc,
+                static_cast<unsigned int>(handle->uuid.u16.value));
+            break;
+        case GattNotifyLogLimiter::Decision::suppressionSummary:
+            RTOS_LOGW(
+                BLE,
+                "Notify failures suppressed conn=%u",
+                static_cast<unsigned int>(handle->subscribed_conn_handle));
+            break;
+        case GattNotifyLogLimiter::Decision::suppressed:
+            break;
+        }
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -456,6 +479,7 @@ void gatt_update_subscription_state(uint16_t conn_handle, uint16_t attr_handle,
 
 void gatt_clear_subscription_state(uint16_t conn_handle)
 {
+    g_notify_log_limiter.resetConnection(conn_handle);
     for (int i = 0; i < gatt_param_count; ++i)
     {
         if (gatt_params[i].subscribed_conn_handle == conn_handle)
