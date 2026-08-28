@@ -362,7 +362,7 @@ esp_err_t gatt_notify(gatt_param_handle_t handle, const void* new_value, size_t 
         case GattNotifyLogLimiter::Decision::suppressionSummary:
             RTOS_LOGW(
                 BLE,
-                "Notify failures suppressed conn=%u",
+                "Notify rc failures suppressed conn=%u",
                 static_cast<unsigned int>(handle->subscribed_conn_handle));
             break;
         case GattNotifyLogLimiter::Decision::suppressed:

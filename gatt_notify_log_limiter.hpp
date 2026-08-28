@@ -3,6 +3,40 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
+
+#if defined(ESP_PLATFORM)
+#include "freertos/FreeRTOS.h"
+#endif
+
+class GattNotifyLogLock
+{
+public:
+    void lock() noexcept
+    {
+#if defined(ESP_PLATFORM)
+        portENTER_CRITICAL(&lock_);
+#else
+        lock_.lock();
+#endif
+    }
+
+    void unlock() noexcept
+    {
+#if defined(ESP_PLATFORM)
+        portEXIT_CRITICAL(&lock_);
+#else
+        lock_.unlock();
+#endif
+    }
+
+private:
+#if defined(ESP_PLATFORM)
+    portMUX_TYPE lock_ = portMUX_INITIALIZER_UNLOCKED;
+#else
+    std::mutex lock_;
+#endif
+};
 
 enum class GattNotifyLogDecision
 {
@@ -11,7 +45,7 @@ enum class GattNotifyLogDecision
     suppressed,
 };
 
-template <std::size_t MaxConnections>
+template <std::size_t MaxConnections, typename Lock = GattNotifyLogLock>
 class GattNotifyLogLimiterFor
 {
 public:
@@ -19,6 +53,7 @@ public:
 
     Decision recordFailure(uint16_t connectionHandle) noexcept
     {
+        const std::lock_guard<Lock> guard(lock_);
         ConnectionState* state = findOrCreateConnection(connectionHandle);
         if (!state)
             return Decision::suppressed;
@@ -40,6 +75,7 @@ public:
 
     void resetConnection(uint16_t connectionHandle) noexcept
     {
+        const std::lock_guard<Lock> guard(lock_);
         for (ConnectionState& state : connections_)
         {
             if (state.active && state.connectionHandle == connectionHandle)
@@ -60,6 +96,8 @@ private:
     };
 
     static constexpr uint8_t kIndividualLimit = 8;
+
+    Lock lock_;
 
     ConnectionState* findOrCreateConnection(uint16_t connectionHandle) noexcept
     {
