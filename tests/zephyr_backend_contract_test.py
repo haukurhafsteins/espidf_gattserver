@@ -48,6 +48,17 @@ class ZephyrBackendContractTest(unittest.TestCase):
         self.assertIn("advertising_data[advertising_count++] = name_data", source)
         self.assertIn("const bt_data scan_response[] = {name_data}", source)
 
+    def test_reliable_notify_retries_only_transient_errors_and_reports_each_attempt(self) -> None:
+        header = (ROOT / "include" / "gattserver.h").read_text(encoding="utf-8")
+        source = (ROOT / "backends" / "zephyr" / "gattserver_zephyr.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("gattserver_notify_reliable", header)
+        self.assertIn("gattserver_register_notify_attempt_cb", header)
+        self.assertIn("notify_retry::transmit", source)
+        self.assertIn("g_notify_attempt_cb(handle, result)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

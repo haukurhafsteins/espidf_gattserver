@@ -94,3 +94,11 @@ target_include_directories(gatt_zephyr_value_arena_test PRIVATE
 )
 
 add_test(NAME gatt_zephyr_value_arena_test COMMAND gatt_zephyr_value_arena_test)
+
+add_executable(gatt_zephyr_notify_retry_test zephyr_notify_retry_test.cpp)
+target_compile_features(gatt_zephyr_notify_retry_test PRIVATE cxx_std_17)
+target_include_directories(gatt_zephyr_notify_retry_test PRIVATE
+    ../backends/zephyr
+)
+
+add_test(NAME gatt_zephyr_notify_retry_test COMMAND gatt_zephyr_notify_retry_test)

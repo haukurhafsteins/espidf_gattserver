@@ -16,6 +16,7 @@
 #include <zephyr/sys/util.h>
 
 #include "gatt_table_builder.hpp"
+#include "gatt_notify_retry.hpp"
 #include "gatt_value_arena.hpp"
 #include "gatt_write_assembler.hpp"
 #include "gattserver_value_storage.hpp"
@@ -119,6 +120,7 @@ bool g_service_change_applied = false;
 bool g_advertising = false;
 uint8_t g_last_disconnect_reason = 0;
 gatt_disconnect_cb_t g_disconnect_cb = nullptr;
+gatt_notify_attempt_cb_t g_notify_attempt_cb = nullptr;
 bt_conn *g_connection = nullptr;
 alignas(std::max_align_t)
 uint8_t g_value_storage[CONFIG_GATTSERVER_VALUE_ARENA_BYTES]{};
@@ -473,7 +475,10 @@ void unregister_services()
 }
 
 esp_err_t notify_payload(
-    gatt_param_handle_t handle, const void *value, size_t length)
+    gatt_param_handle_t handle,
+    const void *value,
+    size_t length,
+    bool retry_transient = false)
 {
     if (handle == nullptr || (value == nullptr && length != 0) ||
         length > UINT16_MAX || handle->value_attr == nullptr)
@@ -493,8 +498,21 @@ esp_err_t notify_payload(
         return ESP_OK;
     }
 
-    const int result = bt_gatt_notify(
-        connection, handle->value_attr, value, static_cast<uint16_t>(length));
+    const auto attempt = [&] {
+        const int result = bt_gatt_notify(
+            connection,
+            handle->value_attr,
+            value,
+            static_cast<uint16_t>(length));
+        if (g_notify_attempt_cb != nullptr)
+            g_notify_attempt_cb(handle, result);
+        return result;
+    };
+    const int result = retry_transient
+        ? gattserver::zephyr::notify_retry::transmit(
+              attempt,
+              [](unsigned milliseconds) { k_sleep(K_MSEC(milliseconds)); })
+        : attempt();
     bt_conn_unref(connection);
     return result_to_esp(result);
 }
@@ -677,6 +695,11 @@ void gattserver_register_disconnect_cb(gatt_disconnect_cb_t callback)
     g_disconnect_cb = callback;
 }
 
+void gattserver_register_notify_attempt_cb(gatt_notify_attempt_cb_t callback)
+{
+    g_notify_attempt_cb = callback;
+}
+
 esp_err_t gattserver_set_value(
     gatt_param_handle_t handle, const void *value, size_t length)
 {
@@ -698,6 +721,15 @@ esp_err_t gattserver_notify(
 {
     const esp_err_t result = gattserver_set_value(handle, value, length);
     return result == ESP_OK ? notify_payload(handle, value, length) : result;
+}
+
+esp_err_t gattserver_notify_reliable(
+    gatt_param_handle_t handle, const void *value, size_t length)
+{
+    const esp_err_t result = gattserver_set_value(handle, value, length);
+    return result == ESP_OK
+        ? notify_payload(handle, value, length, true)
+        : result;
 }
 
 esp_err_t gattserver_notify_custom(

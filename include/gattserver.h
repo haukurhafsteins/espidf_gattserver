@@ -68,7 +68,12 @@ typedef gatt_write_status_t (*gatt_write_status_cb_t)(
     gatt_param_handle_t handle, void *value, size_t len);
 typedef void (*gatt_read_cb_t)(gatt_param_handle_t handle, void *value, size_t len);
 typedef void (*gatt_disconnect_cb_t)(void);
+// Called once for every backend notify attempt. native_result is the stack's
+// native status (Zephyr: negative errno), before conversion to esp_err_t.
+typedef void (*gatt_notify_attempt_cb_t)(
+    gatt_param_handle_t handle, int native_result);
 void gattserver_register_disconnect_cb(gatt_disconnect_cb_t cb);
+void gattserver_register_notify_attempt_cb(gatt_notify_attempt_cb_t cb);
 // Last BLE disconnect reason code (link-layer), for reconnect-time triage.
 uint8_t gattserver_get_last_disconnect_reason(void);
 
@@ -115,6 +120,10 @@ esp_err_t gattserver_register_read_cb(gatt_param_handle_t handle, gatt_read_cb_t
 esp_err_t gattserver_set_value(
     gatt_param_handle_t handle, const void *value, size_t len);
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void *value, size_t len);
+// Control-event notify. Zephyr retries bounded transient TX-pool exhaustion;
+// NimBLE preserves its existing synchronous notify behavior.
+esp_err_t gattserver_notify_reliable(
+    gatt_param_handle_t handle, const void *value, size_t len);
 // Notify with an explicit payload without changing the readable value.
 esp_err_t gattserver_notify_custom(
     gatt_param_handle_t handle, const void *value, size_t len);
