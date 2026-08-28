@@ -1,7 +1,12 @@
 #include <cassert>
 #include <cstdint>
+#include <type_traits>
 
 #include "../gatt_notify_log_limiter.hpp"
+
+static_assert(std::is_same_v<
+              GattNotifyLogLimiterFor<2>::Decision,
+              GattNotifyLogLimiterFor<60>::Decision>);
 
 int main()
 {

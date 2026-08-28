@@ -4,16 +4,18 @@
 #include <cstddef>
 #include <cstdint>
 
+enum class GattNotifyLogDecision
+{
+    individual,
+    suppressionSummary,
+    suppressed,
+};
+
 template <std::size_t MaxConnections>
 class GattNotifyLogLimiterFor
 {
 public:
-    enum class Decision
-    {
-        individual,
-        suppressionSummary,
-        suppressed,
-    };
+    using Decision = GattNotifyLogDecision;
 
     Decision recordFailure(uint16_t connectionHandle) noexcept
     {
