@@ -23,5 +23,28 @@ int main()
 
     assert(limiter.recordFailure(8) ==
            GattNotifyLogLimiter::Decision::individual);
+
+    GattNotifyLogLimiter interleaved;
+    for (int failure = 0; failure < 8; ++failure)
+    {
+        assert(interleaved.recordFailure(7) ==
+               GattNotifyLogLimiter::Decision::individual);
+        assert(interleaved.recordFailure(8) ==
+               GattNotifyLogLimiter::Decision::individual);
+    }
+    assert(interleaved.recordFailure(7) ==
+           GattNotifyLogLimiter::Decision::suppressionSummary);
+    assert(interleaved.recordFailure(8) ==
+           GattNotifyLogLimiter::Decision::suppressionSummary);
+    assert(interleaved.recordFailure(7) ==
+           GattNotifyLogLimiter::Decision::suppressed);
+    assert(interleaved.recordFailure(8) ==
+           GattNotifyLogLimiter::Decision::suppressed);
+
+    interleaved.resetConnection(7);
+    assert(interleaved.recordFailure(7) ==
+           GattNotifyLogLimiter::Decision::individual);
+    assert(interleaved.recordFailure(8) ==
+           GattNotifyLogLimiter::Decision::suppressed);
     return 0;
 }

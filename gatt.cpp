@@ -75,7 +75,7 @@ static int gatt_param_count = 0;
 static struct ble_gatt_svc_def gatt_svr_svcs[GATT_MAX_SERVICES + 1];
 static struct ble_gatt_chr_def characteristics[GATT_MAX_PARAMS + 1];
 static GattServiceChangeState g_service_change;
-static GattNotifyLogLimiter g_notify_log_limiter;
+static GattNotifyLogLimiterFor<GATT_MAX_PARAMS> g_notify_log_limiter;
 
 static gatt_param_t* gatt_find_param_by_handle(uint16_t attr_handle)
 {

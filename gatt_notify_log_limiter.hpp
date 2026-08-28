@@ -1,8 +1,11 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
-class GattNotifyLogLimiter
+template <std::size_t MaxConnections>
+class GattNotifyLogLimiterFor
 {
 public:
     enum class Decision
@@ -14,22 +17,19 @@ public:
 
     Decision recordFailure(uint16_t connectionHandle) noexcept
     {
-        if (connectionHandle_ != connectionHandle)
-        {
-            connectionHandle_ = connectionHandle;
-            individualFailures_ = 0;
-            suppressionSummaryLogged_ = false;
-        }
+        ConnectionState* state = findOrCreateConnection(connectionHandle);
+        if (!state)
+            return Decision::suppressed;
 
-        if (individualFailures_ < kIndividualLimit)
+        if (state->individualFailures < kIndividualLimit)
         {
-            ++individualFailures_;
+            ++state->individualFailures;
             return Decision::individual;
         }
 
-        if (!suppressionSummaryLogged_)
+        if (!state->suppressionSummaryLogged)
         {
-            suppressionSummaryLogged_ = true;
+            state->suppressionSummaryLogged = true;
             return Decision::suppressionSummary;
         }
 
@@ -38,19 +38,47 @@ public:
 
     void resetConnection(uint16_t connectionHandle) noexcept
     {
-        if (connectionHandle_ == connectionHandle)
+        for (ConnectionState& state : connections_)
         {
-            connectionHandle_ = kNoConnection;
-            individualFailures_ = 0;
-            suppressionSummaryLogged_ = false;
+            if (state.active && state.connectionHandle == connectionHandle)
+            {
+                state = {};
+                return;
+            }
         }
     }
 
 private:
-    static constexpr uint8_t kIndividualLimit = 8;
-    static constexpr uint16_t kNoConnection = UINT16_MAX;
+    struct ConnectionState
+    {
+        uint16_t connectionHandle = 0;
+        uint8_t individualFailures = 0;
+        bool suppressionSummaryLogged = false;
+        bool active = false;
+    };
 
-    uint16_t connectionHandle_ = kNoConnection;
-    uint8_t individualFailures_ = 0;
-    bool suppressionSummaryLogged_ = false;
+    static constexpr uint8_t kIndividualLimit = 8;
+
+    ConnectionState* findOrCreateConnection(uint16_t connectionHandle) noexcept
+    {
+        ConnectionState* available = nullptr;
+        for (ConnectionState& state : connections_)
+        {
+            if (state.active && state.connectionHandle == connectionHandle)
+                return &state;
+            if (!state.active && !available)
+                available = &state;
+        }
+
+        if (available)
+        {
+            available->connectionHandle = connectionHandle;
+            available->active = true;
+        }
+        return available;
+    }
+
+    std::array<ConnectionState, MaxConnections> connections_ = {};
 };
+
+using GattNotifyLogLimiter = GattNotifyLogLimiterFor<2>;
