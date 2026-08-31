@@ -72,8 +72,24 @@ typedef void (*gatt_disconnect_cb_t)(void);
 // native status (Zephyr: negative errno), before conversion to esp_err_t.
 typedef void (*gatt_notify_attempt_cb_t)(
     gatt_param_handle_t handle, int native_result);
+// Negotiated LE link snapshot. interval uses 1.25 ms controller units, data
+// lengths are octets, and PHY values use the Bluetooth HCI bit values below.
+#define GATT_LINK_PHY_UNKNOWN 0x00u
+#define GATT_LINK_PHY_1M 0x01u
+#define GATT_LINK_PHY_2M 0x02u
+#define GATT_LINK_PHY_CODED 0x04u
+typedef struct
+{
+    uint16_t interval;
+    uint16_t tx_data_len;
+    uint16_t rx_data_len;
+    uint8_t tx_phy;
+    uint8_t rx_phy;
+} gatt_link_info_t;
+typedef void (*gatt_link_info_cb_t)(const gatt_link_info_t *link_info);
 void gattserver_register_disconnect_cb(gatt_disconnect_cb_t cb);
 void gattserver_register_notify_attempt_cb(gatt_notify_attempt_cb_t cb);
+void gattserver_register_link_info_cb(gatt_link_info_cb_t cb);
 // Last BLE disconnect reason code (link-layer), for reconnect-time triage.
 uint8_t gattserver_get_last_disconnect_reason(void);
 

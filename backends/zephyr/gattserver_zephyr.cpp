@@ -121,6 +121,7 @@ bool g_advertising = false;
 uint8_t g_last_disconnect_reason = 0;
 gatt_disconnect_cb_t g_disconnect_cb = nullptr;
 gatt_notify_attempt_cb_t g_notify_attempt_cb = nullptr;
+gatt_link_info_cb_t g_link_info_cb = nullptr;
 bt_conn *g_connection = nullptr;
 alignas(std::max_align_t)
 uint8_t g_value_storage[CONFIG_GATTSERVER_VALUE_ARENA_BYTES]{};
@@ -287,6 +288,17 @@ void log_link_info(bt_conn *connection, const char *phase)
         txMaxTime,
         rxMaxLen,
         rxMaxTime);
+    if (g_link_info_cb != nullptr)
+    {
+        const gatt_link_info_t linkInfo{
+            .interval = info.le.interval,
+            .tx_data_len = static_cast<std::uint16_t>(txMaxLen),
+            .rx_data_len = static_cast<std::uint16_t>(rxMaxLen),
+            .tx_phy = static_cast<std::uint8_t>(txPhy),
+            .rx_phy = static_cast<std::uint8_t>(rxPhy),
+        };
+        g_link_info_cb(&linkInfo);
+    }
 }
 
 void request_link_parity(bt_conn *connection)
@@ -795,6 +807,11 @@ void gattserver_register_disconnect_cb(gatt_disconnect_cb_t callback)
 void gattserver_register_notify_attempt_cb(gatt_notify_attempt_cb_t callback)
 {
     g_notify_attempt_cb = callback;
+}
+
+void gattserver_register_link_info_cb(gatt_link_info_cb_t callback)
+{
+    g_link_info_cb = callback;
 }
 
 esp_err_t gattserver_set_value(

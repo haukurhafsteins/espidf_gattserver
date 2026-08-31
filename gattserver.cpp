@@ -153,6 +153,11 @@ void gattserver_register_notify_attempt_cb(gatt_notify_attempt_cb_t cb)
     g_notify_attempt_cb = cb;
 }
 
+void gattserver_register_link_info_cb(gatt_link_info_cb_t)
+{
+    // NimBLE link telemetry is not currently consumed by ESP builds.
+}
+
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len)
 {
     const esp_err_t result = gatt_notify(handle, new_value, len);

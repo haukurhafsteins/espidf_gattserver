@@ -59,6 +59,16 @@ class ZephyrBackendContractTest(unittest.TestCase):
         self.assertIn("notify_retry::transmit", source)
         self.assertIn("g_notify_attempt_cb(handle, result)", source)
 
+    def test_link_info_updates_are_exposed_through_neutral_callback(self) -> None:
+        header = (ROOT / "include" / "gattserver.h").read_text(encoding="utf-8")
+        source = (ROOT / "backends" / "zephyr" / "gattserver_zephyr.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("gatt_link_info_t", header)
+        self.assertIn("gattserver_register_link_info_cb", header)
+        self.assertIn("g_link_info_cb(&linkInfo)", source)
+
 
 if __name__ == "__main__":
     unittest.main()
