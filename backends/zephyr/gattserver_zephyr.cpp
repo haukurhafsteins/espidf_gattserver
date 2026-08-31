@@ -242,6 +242,74 @@ bt_conn *active_connection_ref()
     return connection;
 }
 
+void log_link_info(bt_conn *connection, const char *phase)
+{
+    bt_conn_info info{};
+    const int result = bt_conn_get_info(connection, &info);
+    if (result != 0 || info.type != BT_CONN_TYPE_LE)
+    {
+        LOG_WRN("BLE link %s read failed: %d", phase, result);
+        return;
+    }
+
+    unsigned txPhy = 0;
+    unsigned rxPhy = 0;
+    unsigned txMaxLen = 0;
+    unsigned txMaxTime = 0;
+    unsigned rxMaxLen = 0;
+    unsigned rxMaxTime = 0;
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+    if (info.le.phy != nullptr)
+    {
+        txPhy = info.le.phy->tx_phy;
+        rxPhy = info.le.phy->rx_phy;
+    }
+#endif
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+    if (info.le.data_len != nullptr)
+    {
+        txMaxLen = info.le.data_len->tx_max_len;
+        txMaxTime = info.le.data_len->tx_max_time;
+        rxMaxLen = info.le.data_len->rx_max_len;
+        rxMaxTime = info.le.data_len->rx_max_time;
+    }
+#endif
+    LOG_INF(
+        "BLE link %s: interval=%u interval_us=%u latency=%u timeout=%u phy=%u/%u dle=%u/%u/%u/%u",
+        phase,
+        static_cast<unsigned>(info.le.interval),
+        static_cast<unsigned>(BT_CONN_INTERVAL_TO_US(info.le.interval)),
+        static_cast<unsigned>(info.le.latency),
+        static_cast<unsigned>(info.le.timeout),
+        txPhy,
+        rxPhy,
+        txMaxLen,
+        txMaxTime,
+        rxMaxLen,
+        rxMaxTime);
+}
+
+void request_link_parity(bt_conn *connection)
+{
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+    static const bt_conn_le_phy_param preferredPhy =
+        BT_CONN_LE_PHY_PARAM_INIT(BT_GAP_LE_PHY_2M, BT_GAP_LE_PHY_2M);
+    const int phyResult = bt_conn_le_phy_update(
+        connection, &preferredPhy);
+    if (phyResult != 0 && phyResult != -EALREADY)
+        LOG_WRN("BLE 2M PHY request failed: %d", phyResult);
+#endif
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+    static const bt_conn_le_data_len_param preferredDataLength =
+        BT_CONN_LE_DATA_LEN_PARAM_INIT(
+            BT_GAP_DATA_LEN_MAX, BT_GAP_DATA_TIME_MAX);
+    const int dataLengthResult = bt_conn_le_data_len_update(
+        connection, &preferredDataLength);
+    if (dataLengthResult != 0 && dataLengthResult != -EALREADY)
+        LOG_WRN("BLE data length request failed: %d", dataLengthResult);
+#endif
+}
+
 int start_advertising()
 {
     if (!g_started || g_advertising)
@@ -319,6 +387,8 @@ void connected(bt_conn *connection, uint8_t error)
     g_connection = bt_conn_ref(connection);
     k_mutex_unlock(&g_connection_mutex);
     LOG_INF("Connected");
+    log_link_info(connection, "connected");
+    request_link_parity(connection);
 }
 
 void disconnected(bt_conn *connection, uint8_t reason)
@@ -343,9 +413,36 @@ void disconnected(bt_conn *connection, uint8_t reason)
     }
 }
 
+void le_param_updated(
+    bt_conn *connection, uint16_t, uint16_t, uint16_t)
+{
+    log_link_info(connection, "params-updated");
+}
+
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+void le_phy_updated(bt_conn *connection, bt_conn_le_phy_info *)
+{
+    log_link_info(connection, "phy-updated");
+}
+#endif
+
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+void le_data_len_updated(bt_conn *connection, bt_conn_le_data_len_info *)
+{
+    log_link_info(connection, "dle-updated");
+}
+#endif
+
 bt_conn_cb g_connection_callbacks = {
     .connected = connected,
     .disconnected = disconnected,
+    .le_param_updated = le_param_updated,
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+    .le_phy_updated = le_phy_updated,
+#endif
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+    .le_data_len_updated = le_data_len_updated,
+#endif
 };
 
 void reset_registration_state()
