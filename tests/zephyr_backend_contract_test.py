@@ -48,6 +48,50 @@ class ZephyrBackendContractTest(unittest.TestCase):
         self.assertIn("advertising_data[advertising_count++] = name_data", source)
         self.assertIn("const bt_data scan_response[] = {name_data}", source)
 
+    def test_reliable_notify_retries_only_transient_errors_and_reports_each_attempt(self) -> None:
+        header = (ROOT / "include" / "gattserver.h").read_text(encoding="utf-8")
+        source = (ROOT / "backends" / "zephyr" / "gattserver_zephyr.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("gattserver_notify_reliable", header)
+        self.assertIn("gattserver_register_notify_attempt_cb", header)
+        self.assertIn("notify_retry::transmit", source)
+        self.assertIn("g_notify_attempt_cb(handle, result)", source)
+
+    def test_serialized_notify_caps_zephyr_bulk_in_flight_without_changing_esp(self) -> None:
+        header = (ROOT / "include" / "gattserver.h").read_text(encoding="utf-8")
+        zephyr = (ROOT / "backends" / "zephyr" / "gattserver_zephyr.cpp").read_text(
+            encoding="utf-8"
+        )
+        esp = (ROOT / "gattserver.cpp").read_text(encoding="utf-8")
+
+        self.assertIn("gattserver_notify_serialized", header)
+        self.assertIn("bt_gatt_notify_cb", zephyr)
+        self.assertIn("g_serialized_notify_complete", zephyr)
+        self.assertIn("SERIALIZED_NOTIFY_TIMEOUT_MS", zephyr)
+        self.assertIn("-ETIMEDOUT", zephyr)
+        self.assertRegex(
+            zephyr,
+            r"k_sem_take\(\s*&g_serialized_notify_complete",
+        )
+        self.assertIn("k_sem_give(&g_serialized_notify_complete", zephyr)
+        self.assertIn("serialized_notify_finished", zephyr)
+        self.assertRegex(
+            esp,
+            r"gattserver_notify_serialized\([^}]+return gattserver_notify\(",
+        )
+
+    def test_link_info_updates_are_exposed_through_neutral_callback(self) -> None:
+        header = (ROOT / "include" / "gattserver.h").read_text(encoding="utf-8")
+        source = (ROOT / "backends" / "zephyr" / "gattserver_zephyr.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("gatt_link_info_t", header)
+        self.assertIn("gattserver_register_link_info_cb", header)
+        self.assertIn("g_link_info_cb(&linkInfo)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

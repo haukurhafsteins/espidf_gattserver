@@ -13,9 +13,11 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
 
 #include "gatt_table_builder.hpp"
+#include "gatt_notify_retry.hpp"
 #include "gatt_value_arena.hpp"
 #include "gatt_write_assembler.hpp"
 #include "gattserver_value_storage.hpp"
@@ -119,6 +121,8 @@ bool g_service_change_applied = false;
 bool g_advertising = false;
 uint8_t g_last_disconnect_reason = 0;
 gatt_disconnect_cb_t g_disconnect_cb = nullptr;
+gatt_notify_attempt_cb_t g_notify_attempt_cb = nullptr;
+gatt_link_info_cb_t g_link_info_cb = nullptr;
 bt_conn *g_connection = nullptr;
 alignas(std::max_align_t)
 uint8_t g_value_storage[CONFIG_GATTSERVER_VALUE_ARENA_BYTES]{};
@@ -126,6 +130,35 @@ gattserver::zephyr::ValueArena g_value_arena(
     g_value_storage, sizeof(g_value_storage));
 
 K_MUTEX_DEFINE(g_connection_mutex);
+K_MUTEX_DEFINE(g_serialized_notify_mutex);
+K_SEM_DEFINE(g_serialized_notify_complete, 0, 1);
+atomic_t g_serialized_notify_state = ATOMIC_INIT(0);
+
+constexpr atomic_val_t SERIALIZED_NOTIFY_IDLE = 0;
+constexpr atomic_val_t SERIALIZED_NOTIFY_WAITING = 1;
+constexpr atomic_val_t SERIALIZED_NOTIFY_TIMED_OUT = 2;
+constexpr unsigned SERIALIZED_NOTIFY_TIMEOUT_MS = 250;
+
+void finish_serialized_notify()
+{
+    if (atomic_cas(
+            &g_serialized_notify_state,
+            SERIALIZED_NOTIFY_WAITING,
+            SERIALIZED_NOTIFY_IDLE))
+    {
+        k_sem_give(&g_serialized_notify_complete);
+        return;
+    }
+    (void)atomic_cas(
+        &g_serialized_notify_state,
+        SERIALIZED_NOTIFY_TIMED_OUT,
+        SERIALIZED_NOTIFY_IDLE);
+}
+
+void serialized_notify_finished(bt_conn *, void *)
+{
+    finish_serialized_notify();
+}
 
 ssize_t read_value(bt_conn *conn,
                    const bt_gatt_attr *attr,
@@ -240,6 +273,85 @@ bt_conn *active_connection_ref()
     return connection;
 }
 
+void log_link_info(bt_conn *connection, const char *phase)
+{
+    bt_conn_info info{};
+    const int result = bt_conn_get_info(connection, &info);
+    if (result != 0 || info.type != BT_CONN_TYPE_LE)
+    {
+        LOG_WRN("BLE link %s read failed: %d", phase, result);
+        return;
+    }
+
+    unsigned txPhy = 0;
+    unsigned rxPhy = 0;
+    unsigned txMaxLen = 0;
+    unsigned txMaxTime = 0;
+    unsigned rxMaxLen = 0;
+    unsigned rxMaxTime = 0;
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+    if (info.le.phy != nullptr)
+    {
+        txPhy = info.le.phy->tx_phy;
+        rxPhy = info.le.phy->rx_phy;
+    }
+#endif
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+    if (info.le.data_len != nullptr)
+    {
+        txMaxLen = info.le.data_len->tx_max_len;
+        txMaxTime = info.le.data_len->tx_max_time;
+        rxMaxLen = info.le.data_len->rx_max_len;
+        rxMaxTime = info.le.data_len->rx_max_time;
+    }
+#endif
+    LOG_INF(
+        "BLE link %s: interval=%u interval_us=%u latency=%u timeout=%u phy=%u/%u dle=%u/%u/%u/%u",
+        phase,
+        static_cast<unsigned>(info.le.interval),
+        static_cast<unsigned>(BT_CONN_INTERVAL_TO_US(info.le.interval)),
+        static_cast<unsigned>(info.le.latency),
+        static_cast<unsigned>(info.le.timeout),
+        txPhy,
+        rxPhy,
+        txMaxLen,
+        txMaxTime,
+        rxMaxLen,
+        rxMaxTime);
+    if (g_link_info_cb != nullptr)
+    {
+        const gatt_link_info_t linkInfo{
+            .interval = info.le.interval,
+            .tx_data_len = static_cast<std::uint16_t>(txMaxLen),
+            .rx_data_len = static_cast<std::uint16_t>(rxMaxLen),
+            .tx_phy = static_cast<std::uint8_t>(txPhy),
+            .rx_phy = static_cast<std::uint8_t>(rxPhy),
+        };
+        g_link_info_cb(&linkInfo);
+    }
+}
+
+void request_link_parity(bt_conn *connection)
+{
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+    static const bt_conn_le_phy_param preferredPhy =
+        BT_CONN_LE_PHY_PARAM_INIT(BT_GAP_LE_PHY_2M, BT_GAP_LE_PHY_2M);
+    const int phyResult = bt_conn_le_phy_update(
+        connection, &preferredPhy);
+    if (phyResult != 0 && phyResult != -EALREADY)
+        LOG_WRN("BLE 2M PHY request failed: %d", phyResult);
+#endif
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+    static const bt_conn_le_data_len_param preferredDataLength =
+        BT_CONN_LE_DATA_LEN_PARAM_INIT(
+            BT_GAP_DATA_LEN_MAX, BT_GAP_DATA_TIME_MAX);
+    const int dataLengthResult = bt_conn_le_data_len_update(
+        connection, &preferredDataLength);
+    if (dataLengthResult != 0 && dataLengthResult != -EALREADY)
+        LOG_WRN("BLE data length request failed: %d", dataLengthResult);
+#endif
+}
+
 int start_advertising()
 {
     if (!g_started || g_advertising)
@@ -317,6 +429,8 @@ void connected(bt_conn *connection, uint8_t error)
     g_connection = bt_conn_ref(connection);
     k_mutex_unlock(&g_connection_mutex);
     LOG_INF("Connected");
+    log_link_info(connection, "connected");
+    request_link_parity(connection);
 }
 
 void disconnected(bt_conn *connection, uint8_t reason)
@@ -329,6 +443,7 @@ void disconnected(bt_conn *connection, uint8_t reason)
     }
     g_last_disconnect_reason = reason;
     k_mutex_unlock(&g_connection_mutex);
+    finish_serialized_notify();
 
     LOG_INF("Disconnected: 0x%02x", reason);
     if (g_disconnect_cb != nullptr)
@@ -341,9 +456,36 @@ void disconnected(bt_conn *connection, uint8_t reason)
     }
 }
 
+void le_param_updated(
+    bt_conn *connection, uint16_t, uint16_t, uint16_t)
+{
+    log_link_info(connection, "params-updated");
+}
+
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+void le_phy_updated(bt_conn *connection, bt_conn_le_phy_info *)
+{
+    log_link_info(connection, "phy-updated");
+}
+#endif
+
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+void le_data_len_updated(bt_conn *connection, bt_conn_le_data_len_info *)
+{
+    log_link_info(connection, "dle-updated");
+}
+#endif
+
 bt_conn_cb g_connection_callbacks = {
     .connected = connected,
     .disconnected = disconnected,
+    .le_param_updated = le_param_updated,
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+    .le_phy_updated = le_phy_updated,
+#endif
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+    .le_data_len_updated = le_data_len_updated,
+#endif
 };
 
 void reset_registration_state()
@@ -473,7 +615,11 @@ void unregister_services()
 }
 
 esp_err_t notify_payload(
-    gatt_param_handle_t handle, const void *value, size_t length)
+    gatt_param_handle_t handle,
+    const void *value,
+    size_t length,
+    bool retry_transient = false,
+    bool serialized = false)
 {
     if (handle == nullptr || (value == nullptr && length != 0) ||
         length > UINT16_MAX || handle->value_attr == nullptr)
@@ -493,8 +639,75 @@ esp_err_t notify_payload(
         return ESP_OK;
     }
 
-    const int result = bt_gatt_notify(
-        connection, handle->value_attr, value, static_cast<uint16_t>(length));
+    const auto attempt = [&] {
+        const int result = bt_gatt_notify(
+            connection,
+            handle->value_attr,
+            value,
+            static_cast<uint16_t>(length));
+        if (g_notify_attempt_cb != nullptr)
+            g_notify_attempt_cb(handle, result);
+        return result;
+    };
+    int result;
+    if (serialized)
+    {
+        k_mutex_lock(&g_serialized_notify_mutex, K_FOREVER);
+        k_sem_reset(&g_serialized_notify_complete);
+        if (!atomic_cas(
+                &g_serialized_notify_state,
+                SERIALIZED_NOTIFY_IDLE,
+                SERIALIZED_NOTIFY_WAITING))
+        {
+            result = -EBUSY;
+        }
+        else
+        {
+            bt_gatt_notify_params params{};
+            params.attr = handle->value_attr;
+            params.data = value;
+            params.len = static_cast<uint16_t>(length);
+            params.func = serialized_notify_finished;
+            result = bt_gatt_notify_cb(connection, &params);
+            if (g_notify_attempt_cb != nullptr)
+                g_notify_attempt_cb(handle, result);
+            if (result != 0)
+            {
+                (void)atomic_cas(
+                    &g_serialized_notify_state,
+                    SERIALIZED_NOTIFY_WAITING,
+                    SERIALIZED_NOTIFY_IDLE);
+            }
+            else if (k_sem_take(
+                         &g_serialized_notify_complete,
+                         K_MSEC(SERIALIZED_NOTIFY_TIMEOUT_MS)) != 0)
+            {
+                if (atomic_cas(
+                        &g_serialized_notify_state,
+                        SERIALIZED_NOTIFY_WAITING,
+                        SERIALIZED_NOTIFY_TIMED_OUT))
+                {
+                    result = -ETIMEDOUT;
+                }
+                else
+                {
+                    // Completion won the timeout boundary. Consume its
+                    // possible late semaphore token before the next call.
+                    (void)k_sem_take(
+                        &g_serialized_notify_complete, K_NO_WAIT);
+                }
+            }
+        }
+        k_mutex_unlock(&g_serialized_notify_mutex);
+    }
+    else
+    {
+        result = retry_transient
+            ? gattserver::zephyr::notify_retry::transmit(
+                  attempt,
+                  [](unsigned milliseconds) { k_sleep(K_MSEC(milliseconds)); })
+            : attempt();
+    }
     bt_conn_unref(connection);
     return result_to_esp(result);
 }
@@ -677,6 +890,16 @@ void gattserver_register_disconnect_cb(gatt_disconnect_cb_t callback)
     g_disconnect_cb = callback;
 }
 
+void gattserver_register_notify_attempt_cb(gatt_notify_attempt_cb_t callback)
+{
+    g_notify_attempt_cb = callback;
+}
+
+void gattserver_register_link_info_cb(gatt_link_info_cb_t callback)
+{
+    g_link_info_cb = callback;
+}
+
 esp_err_t gattserver_set_value(
     gatt_param_handle_t handle, const void *value, size_t length)
 {
@@ -698,6 +921,24 @@ esp_err_t gattserver_notify(
 {
     const esp_err_t result = gattserver_set_value(handle, value, length);
     return result == ESP_OK ? notify_payload(handle, value, length) : result;
+}
+
+esp_err_t gattserver_notify_reliable(
+    gatt_param_handle_t handle, const void *value, size_t length)
+{
+    const esp_err_t result = gattserver_set_value(handle, value, length);
+    return result == ESP_OK
+        ? notify_payload(handle, value, length, true)
+        : result;
+}
+
+esp_err_t gattserver_notify_serialized(
+    gatt_param_handle_t handle, const void *value, size_t length)
+{
+    const esp_err_t result = gattserver_set_value(handle, value, length);
+    return result == ESP_OK
+        ? notify_payload(handle, value, length, false, true)
+        : result;
 }
 
 esp_err_t gattserver_notify_custom(

@@ -18,6 +18,8 @@
 #define TAG "GATTServer"
 #define GATT_MAX_PARAMS 60
 
+static gatt_notify_attempt_cb_t g_notify_attempt_cb = nullptr;
+
 // The public API is stack-neutral (gatt_uuid_t, GATT_CHR_PROP_*); NimBLE
 // types exist only behind this boundary. Convert here.
 static ble_uuid_any_t to_ble_uuid(const gatt_uuid_t &u)
@@ -146,15 +148,43 @@ void gattserver_register_disconnect_cb(gatt_disconnect_cb_t cb)
     g_disconnect_cb = cb;
 }
 
+void gattserver_register_notify_attempt_cb(gatt_notify_attempt_cb_t cb)
+{
+    g_notify_attempt_cb = cb;
+}
+
+void gattserver_register_link_info_cb(gatt_link_info_cb_t)
+{
+    // NimBLE link telemetry is not currently consumed by ESP builds.
+}
+
 esp_err_t gattserver_notify(gatt_param_handle_t handle, const void* new_value, size_t len)
 {
-    return gatt_notify(handle, new_value, len);
+    const esp_err_t result = gatt_notify(handle, new_value, len);
+    if (g_notify_attempt_cb != nullptr)
+        g_notify_attempt_cb(handle, static_cast<int>(result));
+    return result;
+}
+
+esp_err_t gattserver_notify_reliable(
+    gatt_param_handle_t handle, const void *new_value, size_t len)
+{
+    return gattserver_notify(handle, new_value, len);
+}
+
+esp_err_t gattserver_notify_serialized(
+    gatt_param_handle_t handle, const void *new_value, size_t len)
+{
+    return gattserver_notify(handle, new_value, len);
 }
 
 esp_err_t gattserver_notify_custom(
     gatt_param_handle_t handle, const void *value, size_t len)
 {
-    return gatt_notify_custom(handle, value, len);
+    const esp_err_t result = gatt_notify_custom(handle, value, len);
+    if (g_notify_attempt_cb != nullptr)
+        g_notify_attempt_cb(handle, static_cast<int>(result));
+    return result;
 }
 
 esp_err_t gattserver_set_value(
