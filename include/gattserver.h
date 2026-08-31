@@ -140,6 +140,10 @@ esp_err_t gattserver_notify(gatt_param_handle_t handle, const void *value, size_
 // NimBLE preserves its existing synchronous notify behavior.
 esp_err_t gattserver_notify_reliable(
     gatt_param_handle_t handle, const void *value, size_t len);
+// Low-priority bulk notify. Zephyr permits only one such notification below
+// this call at a time; NimBLE preserves its existing synchronous behavior.
+esp_err_t gattserver_notify_serialized(
+    gatt_param_handle_t handle, const void *value, size_t len);
 // Notify with an explicit payload without changing the readable value.
 esp_err_t gattserver_notify_custom(
     gatt_param_handle_t handle, const void *value, size_t len);

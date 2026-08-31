@@ -13,6 +13,7 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
 
 #include "gatt_table_builder.hpp"
@@ -129,6 +130,35 @@ gattserver::zephyr::ValueArena g_value_arena(
     g_value_storage, sizeof(g_value_storage));
 
 K_MUTEX_DEFINE(g_connection_mutex);
+K_MUTEX_DEFINE(g_serialized_notify_mutex);
+K_SEM_DEFINE(g_serialized_notify_complete, 0, 1);
+atomic_t g_serialized_notify_state = ATOMIC_INIT(0);
+
+constexpr atomic_val_t SERIALIZED_NOTIFY_IDLE = 0;
+constexpr atomic_val_t SERIALIZED_NOTIFY_WAITING = 1;
+constexpr atomic_val_t SERIALIZED_NOTIFY_TIMED_OUT = 2;
+constexpr unsigned SERIALIZED_NOTIFY_TIMEOUT_MS = 250;
+
+void finish_serialized_notify()
+{
+    if (atomic_cas(
+            &g_serialized_notify_state,
+            SERIALIZED_NOTIFY_WAITING,
+            SERIALIZED_NOTIFY_IDLE))
+    {
+        k_sem_give(&g_serialized_notify_complete);
+        return;
+    }
+    (void)atomic_cas(
+        &g_serialized_notify_state,
+        SERIALIZED_NOTIFY_TIMED_OUT,
+        SERIALIZED_NOTIFY_IDLE);
+}
+
+void serialized_notify_finished(bt_conn *, void *)
+{
+    finish_serialized_notify();
+}
 
 ssize_t read_value(bt_conn *conn,
                    const bt_gatt_attr *attr,
@@ -413,6 +443,7 @@ void disconnected(bt_conn *connection, uint8_t reason)
     }
     g_last_disconnect_reason = reason;
     k_mutex_unlock(&g_connection_mutex);
+    finish_serialized_notify();
 
     LOG_INF("Disconnected: 0x%02x", reason);
     if (g_disconnect_cb != nullptr)
@@ -587,7 +618,8 @@ esp_err_t notify_payload(
     gatt_param_handle_t handle,
     const void *value,
     size_t length,
-    bool retry_transient = false)
+    bool retry_transient = false,
+    bool serialized = false)
 {
     if (handle == nullptr || (value == nullptr && length != 0) ||
         length > UINT16_MAX || handle->value_attr == nullptr)
@@ -617,11 +649,65 @@ esp_err_t notify_payload(
             g_notify_attempt_cb(handle, result);
         return result;
     };
-    const int result = retry_transient
-        ? gattserver::zephyr::notify_retry::transmit(
-              attempt,
-              [](unsigned milliseconds) { k_sleep(K_MSEC(milliseconds)); })
-        : attempt();
+    int result;
+    if (serialized)
+    {
+        k_mutex_lock(&g_serialized_notify_mutex, K_FOREVER);
+        k_sem_reset(&g_serialized_notify_complete);
+        if (!atomic_cas(
+                &g_serialized_notify_state,
+                SERIALIZED_NOTIFY_IDLE,
+                SERIALIZED_NOTIFY_WAITING))
+        {
+            result = -EBUSY;
+        }
+        else
+        {
+            bt_gatt_notify_params params{};
+            params.attr = handle->value_attr;
+            params.data = value;
+            params.len = static_cast<uint16_t>(length);
+            params.func = serialized_notify_finished;
+            result = bt_gatt_notify_cb(connection, &params);
+            if (g_notify_attempt_cb != nullptr)
+                g_notify_attempt_cb(handle, result);
+            if (result != 0)
+            {
+                (void)atomic_cas(
+                    &g_serialized_notify_state,
+                    SERIALIZED_NOTIFY_WAITING,
+                    SERIALIZED_NOTIFY_IDLE);
+            }
+            else if (k_sem_take(
+                         &g_serialized_notify_complete,
+                         K_MSEC(SERIALIZED_NOTIFY_TIMEOUT_MS)) != 0)
+            {
+                if (atomic_cas(
+                        &g_serialized_notify_state,
+                        SERIALIZED_NOTIFY_WAITING,
+                        SERIALIZED_NOTIFY_TIMED_OUT))
+                {
+                    result = -ETIMEDOUT;
+                }
+                else
+                {
+                    // Completion won the timeout boundary. Consume its
+                    // possible late semaphore token before the next call.
+                    (void)k_sem_take(
+                        &g_serialized_notify_complete, K_NO_WAIT);
+                }
+            }
+        }
+        k_mutex_unlock(&g_serialized_notify_mutex);
+    }
+    else
+    {
+        result = retry_transient
+            ? gattserver::zephyr::notify_retry::transmit(
+                  attempt,
+                  [](unsigned milliseconds) { k_sleep(K_MSEC(milliseconds)); })
+            : attempt();
+    }
     bt_conn_unref(connection);
     return result_to_esp(result);
 }
@@ -843,6 +929,15 @@ esp_err_t gattserver_notify_reliable(
     const esp_err_t result = gattserver_set_value(handle, value, length);
     return result == ESP_OK
         ? notify_payload(handle, value, length, true)
+        : result;
+}
+
+esp_err_t gattserver_notify_serialized(
+    gatt_param_handle_t handle, const void *value, size_t length)
+{
+    const esp_err_t result = gattserver_set_value(handle, value, length);
+    return result == ESP_OK
+        ? notify_payload(handle, value, length, false, true)
         : result;
 }
 

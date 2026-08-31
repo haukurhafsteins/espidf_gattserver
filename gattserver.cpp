@@ -172,6 +172,12 @@ esp_err_t gattserver_notify_reliable(
     return gattserver_notify(handle, new_value, len);
 }
 
+esp_err_t gattserver_notify_serialized(
+    gatt_param_handle_t handle, const void *new_value, size_t len)
+{
+    return gattserver_notify(handle, new_value, len);
+}
+
 esp_err_t gattserver_notify_custom(
     gatt_param_handle_t handle, const void *value, size_t len)
 {
