@@ -33,6 +33,10 @@ static_assert(GATT_CHR_PROP_INDICATE == BT_GATT_CHRC_INDICATE);
 static_assert(gattserver::zephyr::kPermissionNone == BT_GATT_PERM_NONE);
 static_assert(gattserver::zephyr::kPermissionRead == BT_GATT_PERM_READ);
 static_assert(gattserver::zephyr::kPermissionWrite == BT_GATT_PERM_WRITE);
+static_assert(gattserver::zephyr::kPermissionReadEncrypt ==
+              BT_GATT_PERM_READ_ENCRYPT);
+static_assert(gattserver::zephyr::kPermissionWriteEncrypt ==
+              BT_GATT_PERM_WRITE_ENCRYPT);
 static_assert(gattserver::zephyr::kPermissionPrepareWrite ==
               BT_GATT_PERM_PREPARE_WRITE);
 static_assert(CONFIG_BT_ATT_PREPARE_COUNT >= 4,
@@ -536,13 +540,6 @@ int register_services()
 
             const auto layout =
                 gattserver::zephyr::build_characteristic_layout(param.flags);
-            if (layout.encryption_deferred)
-            {
-                // TODO(stage 4): enforce the ENC flags after Zephyr settings
-                // and rtos NVS receive non-overlapping flash ownership.
-                LOG_WRN("Encrypted GATT permissions deferred for Stage 2");
-            }
-
             param.characteristic = {
                 .uuid = param.uuid,
                 .value_handle = 0,
@@ -1101,8 +1098,9 @@ void gattserver_start(const char *name)
         return;
     }
 
-    // Dynamic registration triggers Zephyr's Service Changed handling. Stage 2
-    // has no bond store, so the requested handle range needs no persistence.
+    // Dynamic registration triggers Zephyr's Service Changed handling. Bonded
+    // peers' Service Changed state is persisted by Zephyr's settings-backed
+    // bond store, not by this backend.
     g_service_change_applied = g_service_change_scheduled;
     g_started = true;
     if (start_advertising() != 0)
