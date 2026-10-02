@@ -93,5 +93,32 @@ class ZephyrBackendContractTest(unittest.TestCase):
         self.assertIn("g_link_info_cb(&linkInfo)", source)
 
 
+class ZephyrEncryptionContractTest(unittest.TestCase):
+    def test_declared_encryption_is_enforced_not_deferred(self) -> None:
+        builder = (ROOT / "backends" / "zephyr" / "gatt_table_builder.hpp").read_text(
+            encoding="utf-8"
+        )
+        source = (ROOT / "backends" / "zephyr" / "gattserver_zephyr.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("encryption_deferred", builder)
+        self.assertNotIn("encryption_deferred", source)
+        self.assertNotIn("Encrypted GATT permissions deferred", source)
+        self.assertIn(
+            "gattserver::zephyr::kPermissionReadEncrypt ==\n              BT_GATT_PERM_READ_ENCRYPT",
+            source,
+        )
+        self.assertIn(
+            "gattserver::zephyr::kPermissionWriteEncrypt ==\n              BT_GATT_PERM_WRITE_ENCRYPT",
+            source,
+        )
+        # The computed mask, including the encrypt bits, is what Zephyr checks.
+        self.assertIn(".perm = layout.permissions,", source)
+        # Callbacks still follow the base bits, so encrypted values keep them.
+        self.assertIn("(layout.permissions & BT_GATT_PERM_READ) != 0", source)
+        self.assertIn("(layout.permissions & BT_GATT_PERM_WRITE) != 0", source)
+
+
 if __name__ == "__main__":
     unittest.main()

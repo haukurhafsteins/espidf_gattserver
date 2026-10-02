@@ -18,7 +18,6 @@ int main()
     assert(readable.properties == GATT_CHR_PROP_READ);
     assert(readable.permissions == gattserver::zephyr::kPermissionRead);
     assert(!readable.has_ccc);
-    assert(!readable.encryption_deferred);
     assert(readable.attribute_count == 2);
 
     const CharacteristicLayout writable = build_characteristic_layout(
@@ -37,14 +36,58 @@ int main()
     assert(notify_only.has_ccc);
     assert(notify_only.attribute_count == 3);
 
+    namespace zp = gattserver::zephyr;
+
+    // Declared ENC flags are enforced per operation, as NimBLE does on ESP.
     const CharacteristicLayout encrypted = build_characteristic_layout(
         GATT_CHR_PROP_READ | GATT_CHR_PROP_WRITE |
         GATT_CHR_F_READ_ENC | GATT_CHR_F_WRITE_ENC);
     assert(encrypted.permissions ==
-           (gattserver::zephyr::kPermissionRead |
-            gattserver::zephyr::kPermissionWrite |
-            gattserver::zephyr::kPermissionPrepareWrite));
-    assert(encrypted.encryption_deferred);
+           (zp::kPermissionRead | zp::kPermissionWrite |
+            zp::kPermissionPrepareWrite | zp::kPermissionReadEncrypt |
+            zp::kPermissionWriteEncrypt));
+    assert(encrypted.attribute_count == 2);
+
+    const CharacteristicLayout read_enc_only = build_characteristic_layout(
+        GATT_CHR_PROP_READ | GATT_CHR_PROP_WRITE | GATT_CHR_F_READ_ENC);
+    assert(read_enc_only.permissions ==
+           (zp::kPermissionRead | zp::kPermissionWrite |
+            zp::kPermissionPrepareWrite | zp::kPermissionReadEncrypt));
+
+    const CharacteristicLayout write_enc_only = build_characteristic_layout(
+        GATT_CHR_PROP_READ | GATT_CHR_PROP_WRITE | GATT_CHR_F_WRITE_ENC);
+    assert(write_enc_only.permissions ==
+           (zp::kPermissionRead | zp::kPermissionWrite |
+            zp::kPermissionPrepareWrite | zp::kPermissionWriteEncrypt));
+
+    // Write-without-response alone is still a write and must be protected.
+    const CharacteristicLayout write_no_rsp_enc = build_characteristic_layout(
+        GATT_CHR_PROP_WRITE_NO_RSP | GATT_CHR_F_WRITE_ENC);
+    assert(write_no_rsp_enc.permissions ==
+           (zp::kPermissionWrite | zp::kPermissionPrepareWrite |
+            zp::kPermissionWriteEncrypt));
+
+    // An ENC flag never invents an operation the properties do not allow.
+    const CharacteristicLayout read_with_write_enc = build_characteristic_layout(
+        GATT_CHR_PROP_READ | GATT_CHR_F_WRITE_ENC);
+    assert(read_with_write_enc.permissions == zp::kPermissionRead);
+    const CharacteristicLayout write_with_read_enc = build_characteristic_layout(
+        GATT_CHR_PROP_WRITE | GATT_CHR_F_READ_ENC);
+    assert(write_with_read_enc.permissions ==
+           (zp::kPermissionWrite | zp::kPermissionPrepareWrite));
+    const CharacteristicLayout notify_enc = build_characteristic_layout(
+        GATT_CHR_PROP_NOTIFY | GATT_CHR_F_READ_ENC);
+    assert(notify_enc.permissions == zp::kPermissionNone);
+    assert(notify_enc.has_ccc);
+    assert(notify_enc.attribute_count == 3);
+
+    // Encrypted read + notify keeps its CCC and three attributes.
+    const CharacteristicLayout read_notify_enc = build_characteristic_layout(
+        GATT_CHR_PROP_READ | GATT_CHR_PROP_NOTIFY | GATT_CHR_F_READ_ENC);
+    assert(read_notify_enc.permissions ==
+           (zp::kPermissionRead | zp::kPermissionReadEncrypt));
+    assert(read_notify_enc.has_ccc);
+    assert(read_notify_enc.attribute_count == 3);
 
     constexpr std::array<gatt_chr_flags_t, 3> flags = {
         GATT_CHR_PROP_READ,
