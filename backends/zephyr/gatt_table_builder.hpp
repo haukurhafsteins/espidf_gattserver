@@ -9,11 +9,14 @@
 namespace gattserver::zephyr
 {
 
-// These portable permission bits deliberately match Zephyr's basic read and
-// write permissions. The backend proves that relationship with static_asserts.
+// These portable permission bits deliberately match Zephyr's read, write and
+// encryption permissions. The backend proves that relationship with
+// static_asserts.
 constexpr uint16_t kPermissionNone = 0;
 constexpr uint16_t kPermissionRead = 1u << 0;
 constexpr uint16_t kPermissionWrite = 1u << 1;
+constexpr uint16_t kPermissionReadEncrypt = 1u << 2;
+constexpr uint16_t kPermissionWriteEncrypt = 1u << 3;
 constexpr uint16_t kPermissionPrepareWrite = 1u << 6;
 
 struct CharacteristicLayout
@@ -21,7 +24,6 @@ struct CharacteristicLayout
     uint8_t properties;
     uint16_t permissions;
     bool has_ccc;
-    bool encryption_deferred;
     size_t attribute_count;
 };
 
@@ -38,26 +40,29 @@ constexpr CharacteristicLayout build_characteristic_layout(
 
     const uint8_t properties = static_cast<uint8_t>(flags & property_mask);
     uint16_t permissions = kPermissionNone;
+    // Each ENC flag protects only the operation it names, and only when the
+    // properties already allow that operation (NimBLE semantics on ESP).
     if ((properties & GATT_CHR_PROP_READ) != 0)
     {
         permissions |= kPermissionRead;
+        if ((flags & GATT_CHR_F_READ_ENC) != 0)
+            permissions |= kPermissionReadEncrypt;
     }
     if ((properties &
          (GATT_CHR_PROP_WRITE | GATT_CHR_PROP_WRITE_NO_RSP)) != 0)
     {
         permissions |= kPermissionWrite | kPermissionPrepareWrite;
+        if ((flags & GATT_CHR_F_WRITE_ENC) != 0)
+            permissions |= kPermissionWriteEncrypt;
     }
 
     const bool has_ccc =
         (properties & (GATT_CHR_PROP_NOTIFY | GATT_CHR_PROP_INDICATE)) != 0;
-    const bool encryption_deferred =
-        (flags & (GATT_CHR_F_READ_ENC | GATT_CHR_F_WRITE_ENC)) != 0;
 
     return {
         properties,
         permissions,
         has_ccc,
-        encryption_deferred,
         static_cast<size_t>(has_ccc ? 3 : 2),
     };
 }
